@@ -4,6 +4,8 @@ const navLinks = [
   { to: '/', label: 'Dashboard', icon: '📊' },
   { to: '/signals', label: 'Signals', icon: '📡' },
   { to: '/signals/new', label: 'Add Signal', icon: '➕' },
+  { to: '/watchlist', label: 'Watch List', icon: '👀' },
+  { to: '/external-search', label: 'External Search', icon: '📰' },
 ];
 
 export default function Navbar() {

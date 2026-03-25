@@ -7,6 +7,8 @@ import { initDb } from './db/schema';
 import signalsRouter from './routes/signals';
 import dashboardRouter from './routes/dashboard';
 import ingestRouter from './routes/ingest';
+import watchlistRouter from './routes/watchlist';
+import newsSearchRouter from './routes/newsSearch';
 
 dotenv.config();
 
@@ -28,6 +30,8 @@ app.use(express.urlencoded({ extended: true }));
 app.use('/api/signals', signalsRouter);
 app.use('/api/dashboard', dashboardRouter);
 app.use('/api/ingest', ingestRouter);
+app.use('/api/watchlist', watchlistRouter);
+app.use('/api/news', newsSearchRouter);
 
 app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });

@@ -3,6 +3,132 @@ import { getDb } from '../db/schema';
 
 const router = Router();
 
+const OPENAI_API_URL = 'https://api.openai.com/v1/chat/completions';
+const ALLOWED_SIGNAL_TYPES = new Set(['weak', 'strong', 'emerging', 'established']);
+
+function clampRating(value: unknown): number | null {
+  const num = Number(value);
+  if (!Number.isFinite(num)) return null;
+  return Math.max(1, Math.min(5, Math.round(num)));
+}
+
+function normalizeTags(value: unknown): string {
+  if (Array.isArray(value)) {
+    return JSON.stringify(value.map((v) => String(v).trim()).filter(Boolean));
+  }
+  if (typeof value === 'string') {
+    const raw = value.trim();
+    if (!raw) return '[]';
+    if (raw.startsWith('[')) {
+      try {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) {
+          return JSON.stringify(parsed.map((v) => String(v).trim()).filter(Boolean));
+        }
+      } catch {
+        return JSON.stringify(raw.split(',').map((v) => v.trim()).filter(Boolean));
+      }
+    }
+    return JSON.stringify(raw.split(',').map((v) => v.trim()).filter(Boolean));
+  }
+  return '[]';
+}
+
+function extractJsonObject(text: string): Record<string, unknown> {
+  try {
+    return JSON.parse(text) as Record<string, unknown>;
+  } catch {
+    const start = text.indexOf('{');
+    const end = text.lastIndexOf('}');
+    if (start >= 0 && end > start) {
+      return JSON.parse(text.slice(start, end + 1)) as Record<string, unknown>;
+    }
+    throw new Error('Invalid JSON returned by AI');
+  }
+}
+
+async function generateAiSignalMetadata(signal: Record<string, unknown>) {
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) {
+    throw new Error('OPENAI_API_KEY is not configured');
+  }
+
+  const model = process.env.OPENAI_MODEL || 'gpt-4o-mini';
+  const inputPayload = {
+    title: signal.title,
+    summary: signal.summary,
+    source_name: signal.source_name,
+    source_type: signal.source_type,
+    url: signal.url,
+    publication_date: signal.publication_date,
+    topic_area: signal.topic_area,
+    focus_area: signal.focus_area,
+    technology_area: signal.technology_area,
+    driver_trend: signal.driver_trend,
+    geographic_relevance: signal.geographic_relevance,
+    industry_relevance: signal.industry_relevance,
+    signal_type: signal.signal_type,
+    analyst_notes: signal.analyst_notes
+  };
+
+  const response = await fetch(OPENAI_API_URL, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${apiKey}`
+    },
+    body: JSON.stringify({
+      model,
+      temperature: 0.2,
+      response_format: { type: 'json_object' },
+      messages: [
+        {
+          role: 'system',
+          content:
+            'You are a strategic intelligence analyst. Return only JSON with these fields: summary, topic_area, focus_area, technology_area, driver_trend, signal_type, geographic_relevance, industry_relevance, confidence_level, novelty, potential_impact, tags, analyst_notes. Use concise professional language. summary must be 2-4 sentences. confidence_level/novelty/potential_impact must be integers 1-5. tags must be an array of 3-8 short tags. signal_type must be one of weak,strong,emerging,established.'
+        },
+        {
+          role: 'user',
+          content: JSON.stringify(inputPayload)
+        }
+      ]
+    })
+  });
+
+  if (!response.ok) {
+    const bodyText = await response.text();
+    throw new Error(`OpenAI API error (${response.status}): ${bodyText}`);
+  }
+
+  const data = await response.json() as {
+    choices?: Array<{ message?: { content?: string } }>;
+  };
+
+  const content = data.choices?.[0]?.message?.content;
+  if (!content) {
+    throw new Error('OpenAI returned an empty response');
+  }
+
+  const parsed = extractJsonObject(content);
+  return {
+    summary: typeof parsed.summary === 'string' ? parsed.summary.trim() : null,
+    topic_area: typeof parsed.topic_area === 'string' ? parsed.topic_area.trim() : null,
+    focus_area: typeof parsed.focus_area === 'string' ? parsed.focus_area.trim() : null,
+    technology_area: typeof parsed.technology_area === 'string' ? parsed.technology_area.trim() : null,
+    driver_trend: typeof parsed.driver_trend === 'string' ? parsed.driver_trend.trim() : null,
+    signal_type: typeof parsed.signal_type === 'string' && ALLOWED_SIGNAL_TYPES.has(parsed.signal_type)
+      ? parsed.signal_type
+      : null,
+    geographic_relevance: typeof parsed.geographic_relevance === 'string' ? parsed.geographic_relevance.trim() : null,
+    industry_relevance: typeof parsed.industry_relevance === 'string' ? parsed.industry_relevance.trim() : null,
+    confidence_level: clampRating(parsed.confidence_level),
+    novelty: clampRating(parsed.novelty),
+    potential_impact: clampRating(parsed.potential_impact),
+    tags: normalizeTags(parsed.tags),
+    analyst_notes: typeof parsed.analyst_notes === 'string' ? parsed.analyst_notes.trim() : null
+  };
+}
+
 // GET /api/signals - list with filters and pagination
 router.get('/', (req: Request, res: Response) => {
   try {
@@ -194,6 +320,65 @@ router.put('/:id', (req: Request, res: Response) => {
   } catch (err) {
     console.error('Error updating signal:', err);
     res.status(500).json({ error: 'Failed to update signal' });
+  }
+});
+
+// POST /api/signals/:id/ai-enrich
+router.post('/:id/ai-enrich', async (req: Request, res: Response) => {
+  try {
+    const db = getDb();
+    const existing = db.prepare('SELECT * FROM signals WHERE id = ?').get(req.params.id) as Record<string, unknown> | undefined;
+    if (!existing) return res.status(404).json({ error: 'Signal not found' });
+
+    const suggestion = await generateAiSignalMetadata(existing);
+    const shouldApply = req.body?.apply !== false;
+
+    if (!shouldApply) {
+      return res.json({ applied: false, suggestion });
+    }
+
+    const now = new Date().toISOString();
+    db.prepare(`
+      UPDATE signals SET
+        summary = @summary,
+        topic_area = @topic_area,
+        focus_area = @focus_area,
+        technology_area = @technology_area,
+        driver_trend = @driver_trend,
+        signal_type = @signal_type,
+        geographic_relevance = @geographic_relevance,
+        industry_relevance = @industry_relevance,
+        confidence_level = @confidence_level,
+        novelty = @novelty,
+        potential_impact = @potential_impact,
+        tags = @tags,
+        analyst_notes = @analyst_notes,
+        updated_at = @updated_at
+      WHERE id = @id
+    `).run({
+      id: req.params.id,
+      summary: suggestion.summary || existing.summary || null,
+      topic_area: suggestion.topic_area || existing.topic_area || null,
+      focus_area: suggestion.focus_area || existing.focus_area || null,
+      technology_area: suggestion.technology_area || existing.technology_area || null,
+      driver_trend: suggestion.driver_trend || existing.driver_trend || null,
+      signal_type: suggestion.signal_type || existing.signal_type || null,
+      geographic_relevance: suggestion.geographic_relevance || existing.geographic_relevance || null,
+      industry_relevance: suggestion.industry_relevance || existing.industry_relevance || null,
+      confidence_level: suggestion.confidence_level ?? existing.confidence_level ?? null,
+      novelty: suggestion.novelty ?? existing.novelty ?? null,
+      potential_impact: suggestion.potential_impact ?? existing.potential_impact ?? null,
+      tags: suggestion.tags || existing.tags || '[]',
+      analyst_notes: suggestion.analyst_notes || existing.analyst_notes || null,
+      updated_at: now
+    });
+
+    const updated = db.prepare('SELECT * FROM signals WHERE id = ?').get(req.params.id);
+    return res.json({ applied: true, suggestion, signal: updated });
+  } catch (err) {
+    console.error('Error generating AI enrichment:', err);
+    const message = err instanceof Error ? err.message : 'Failed to generate AI enrichment';
+    return res.status(500).json({ error: message });
   }
 });
 

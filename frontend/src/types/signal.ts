@@ -78,3 +78,60 @@ export interface DashboardStats {
   signalsOverTime: { week: string; count: number }[];
   recentSignals: Partial<Signal>[];
 }
+
+export type WatchListStatus = 'active' | 'paused' | 'archived';
+
+export interface WatchListEntry {
+  id: number;
+  name: string;
+  search_query: string;
+  description?: string;
+  topic_area?: string;
+  focus_area?: string;
+  technology_area?: string;
+  driver_trend?: string;
+  geographic_relevance?: string;
+  industry_relevance?: string;
+  language?: string;
+  source_filter?: string;
+  from_date?: string;
+  to_date?: string;
+  sort_by?: string;
+  priority: number;
+  status: WatchListStatus;
+  tags?: string;
+  notes?: string;
+  created_by?: string;
+  updated_by?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface NewsReviewCandidate {
+  id: number;
+  review_status: 'new' | 'imported' | 'dismissed';
+  search_term: string;
+  scan_timestamp: string;
+  imported_signal_id?: number;
+  watchlist_entry_id?: number;
+  watchlist_name?: string;
+  title: string;
+  source_name?: string;
+  author?: string;
+  description?: string;
+  content_snippet?: string;
+  url: string;
+  publication_date?: string;
+  scan_id: number;
+  provider: string;
+  scan_status: 'success' | 'error';
+  error_message?: string;
+}
+
+export interface NewsSearchRun {
+  scanId: number;
+  provider: string;
+  searchTerm: string;
+  resultCount: number;
+  importedCount: number;
+}

@@ -43,6 +43,9 @@ export default function SignalDetail() {
   const [signal, setSignal] = useState<Signal | null>(null);
   const [loading, setLoading] = useState(true);
   const [deleting, setDeleting] = useState(false);
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiMessage, setAiMessage] = useState<string | null>(null);
+  const [aiError, setAiError] = useState<string | null>(null);
 
   useEffect(() => {
     axios.get<Signal>(`/api/signals/${id}`)
@@ -59,6 +62,25 @@ export default function SignalDetail() {
     } catch (err) {
       console.error('Delete failed:', err);
       setDeleting(false);
+    }
+  }
+
+  async function handleAiEnrich() {
+    setAiLoading(true);
+    setAiError(null);
+    setAiMessage(null);
+    try {
+      const res = await axios.post<{ applied: boolean; signal: Signal }>(`/api/signals/${id}/ai-enrich`, { apply: true });
+      if (res.data.signal) {
+        setSignal(res.data.signal);
+      }
+      setAiMessage('AI summary and metadata generated and applied.');
+    } catch (err: unknown) {
+      console.error('AI enrichment failed:', err);
+      const maybe = err as { response?: { data?: { error?: string } } };
+      setAiError(maybe.response?.data?.error || 'Failed to run AI enrichment');
+    } finally {
+      setAiLoading(false);
     }
   }
 
@@ -96,6 +118,9 @@ export default function SignalDetail() {
               </div>
             </div>
             <div className="flex gap-2 shrink-0">
+              <button onClick={handleAiEnrich} disabled={aiLoading} className="border border-indigo-200 text-indigo-700 px-4 py-2 rounded-lg text-sm font-medium hover:bg-indigo-50 transition-colors disabled:opacity-50">
+                {aiLoading ? 'Generating...' : 'Generate with AI'}
+              </button>
               <Link to={`/signals/${signal.id}/edit`} className="bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-indigo-700 transition-colors">
                 Edit
               </Link>
@@ -105,6 +130,12 @@ export default function SignalDetail() {
             </div>
           </div>
         </div>
+
+        {(aiMessage || aiError) && (
+          <div className={`px-6 py-3 border-b text-sm ${aiError ? 'bg-red-50 border-red-200 text-red-700' : 'bg-emerald-50 border-emerald-200 text-emerald-700'}`}>
+            {aiError || aiMessage}
+          </div>
+        )}
 
         <div className="p-6 grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Main content */}

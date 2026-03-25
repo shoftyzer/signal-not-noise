@@ -4,6 +4,8 @@ import Dashboard from './pages/Dashboard';
 import SignalList from './pages/SignalList';
 import SignalDetail from './pages/SignalDetail';
 import SignalForm from './pages/SignalForm';
+import WatchList from './pages/WatchList';
+import ExternalSearch from './pages/ExternalSearch';
 
 export default function App() {
   return (
@@ -17,6 +19,8 @@ export default function App() {
             <Route path="/signals/new" element={<SignalForm />} />
             <Route path="/signals/:id" element={<SignalDetail />} />
             <Route path="/signals/:id/edit" element={<SignalForm />} />
+            <Route path="/watchlist" element={<WatchList />} />
+            <Route path="/external-search" element={<ExternalSearch />} />
           </Routes>
         </main>
       </div>

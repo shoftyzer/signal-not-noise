@@ -1,0 +1,24 @@
+:{$PORT:80} {
+	root * /app/dist
+
+	# Compress responses
+	encode gzip
+
+	# Cache static assets (JS, CSS, images, fonts) aggressively
+	# Vite fingerprints these files with content hashes
+	@assets {
+		path /assets/*
+	}
+	header @assets Cache-Control "public, max-age=31536000, immutable"
+
+	# Do not cache index.html so the browser always fetches the latest shell
+	@html {
+		path *.html
+	}
+	header @html Cache-Control "no-cache, no-store, must-revalidate"
+
+	# SPA routing: serve index.html for any request that doesn't match a real file
+	try_files {path} /index.html
+
+	file_server
+}

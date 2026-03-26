@@ -510,37 +510,44 @@ const sampleSignals = [
 ];
 
 function seed(): void {
-  initDb();
-  const db = getDb();
+  initDb().then(async () => {
+    const pool = getDb();
 
-  const existing = db.prepare('SELECT COUNT(*) as count FROM signals').get() as { count: number };
-  if (existing.count > 0) {
-    console.log(`Database already has ${existing.count} signals. Skipping seed.`);
-    return;
-  }
-
-  const insert = db.prepare(`
-    INSERT INTO signals (
-      title, summary, source_name, source_type, url, publication_date, scan_date,
-      topic_area, focus_area, technology_area, driver_trend, signal_type,
-      geographic_relevance, industry_relevance, confidence_level, novelty,
-      potential_impact, time_horizon, status, tags, analyst_notes
-    ) VALUES (
-      @title, @summary, @source_name, @source_type, @url, @publication_date, @scan_date,
-      @topic_area, @focus_area, @technology_area, @driver_trend, @signal_type,
-      @geographic_relevance, @industry_relevance, @confidence_level, @novelty,
-      @potential_impact, @time_horizon, @status, @tags, @analyst_notes
-    )
-  `);
-
-  const insertMany = db.transaction((signals: typeof sampleSignals) => {
-    for (const signal of signals) {
-      insert.run(signal);
+    const { rows } = await pool.query('SELECT COUNT(*) as count FROM signals');
+    const count = parseInt(rows[0].count, 10);
+    if (count > 0) {
+      console.log(`Database already has ${count} signals. Skipping seed.`);
+      return;
     }
-  });
 
-  insertMany(sampleSignals);
-  console.log(`Seeded ${sampleSignals.length} sample signals successfully.`);
+    for (const signal of sampleSignals) {
+      await pool.query(`
+        INSERT INTO signals (
+          title, summary, source_name, source_type, url, publication_date, scan_date,
+          topic_area, focus_area, technology_area, driver_trend, signal_type,
+          geographic_relevance, industry_relevance, confidence_level, novelty,
+          potential_impact, time_horizon, status, tags, analyst_notes
+        ) VALUES (
+          $1, $2, $3, $4, $5, $6, $7,
+          $8, $9, $10, $11, $12,
+          $13, $14, $15, $16,
+          $17, $18, $19, $20, $21
+        )
+      `, [
+        signal.title, signal.summary, signal.source_name, signal.source_type, signal.url,
+        signal.publication_date, signal.scan_date, signal.topic_area, signal.focus_area,
+        signal.technology_area, signal.driver_trend, signal.signal_type,
+        signal.geographic_relevance, signal.industry_relevance, signal.confidence_level,
+        signal.novelty, signal.potential_impact, signal.time_horizon, signal.status,
+        signal.tags, signal.analyst_notes
+      ]);
+    }
+
+    console.log(`Seeded ${sampleSignals.length} sample signals successfully.`);
+  }).catch(err => {
+    console.error('Seed failed:', err);
+    process.exit(1);
+  });
 }
 
 seed();

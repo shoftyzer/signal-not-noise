@@ -94,8 +94,9 @@ router.post('/search', async (req: Request, res: Response) => {
 // POST /api/news/search/watchlist/:id
 router.post('/search/watchlist/:id', async (req: Request, res: Response) => {
   try {
-    const db = getDb();
-    const entry = db.prepare('SELECT * FROM watch_list_entries WHERE id = ?').get(req.params.id) as any;
+    const pool = getDb();
+    const { rows } = await pool.query('SELECT * FROM watch_list_entries WHERE id = $1', [req.params.id]);
+    const entry = rows[0];
     if (!entry) return res.status(404).json({ error: 'Watchlist entry not found' });
 
     if (entry.status !== 'active') {
@@ -121,8 +122,8 @@ router.post('/search/watchlist/:id', async (req: Request, res: Response) => {
 // POST /api/news/search/watchlist-active
 router.post('/search/watchlist-active', async (req: Request, res: Response) => {
   try {
-    const db = getDb();
-    const entries = db.prepare("SELECT * FROM watch_list_entries WHERE status = 'active' ORDER BY priority DESC, updated_at DESC").all() as any[];
+    const pool = getDb();
+    const { rows: entries } = await pool.query("SELECT * FROM watch_list_entries WHERE status = 'active' ORDER BY priority DESC, updated_at DESC");
 
     const maxRuns = Math.min(25, Math.max(1, parseInt(String(req.body?.maxRuns || entries.length), 10) || entries.length));
     const runEntries = entries.slice(0, maxRuns);
@@ -165,13 +166,13 @@ router.post('/search/watchlist-active', async (req: Request, res: Response) => {
 });
 
 // GET /api/news/review
-router.get('/review', (req: Request, res: Response) => {
+router.get('/review', async (req: Request, res: Response) => {
   try {
     const reviewStatus = toOptionalString(req.query.review_status);
     const watchlistEntryId = toOptionalString(req.query.watchlist_entry_id);
     const limit = Math.min(200, Math.max(1, parseInt(String(req.query.limit || '100'), 10) || 100));
 
-    const rows = listReviewCandidates({
+    const rows = await listReviewCandidates({
       reviewStatus,
       watchlistEntryId: watchlistEntryId ? parseInt(watchlistEntryId, 10) : undefined,
       limit
@@ -185,10 +186,10 @@ router.get('/review', (req: Request, res: Response) => {
 });
 
 // POST /api/news/review/:id/import
-router.post('/review/:id/import', (req: Request, res: Response) => {
+router.post('/review/:id/import', async (req: Request, res: Response) => {
   try {
     const id = parseInt(req.params.id, 10);
-    const result = importSearchResultToSignals(id, {
+    const result = await importSearchResultToSignals(id, {
       importedBy: actor(req),
       status: toOptionalString(req.body?.status) || 'new'
     });
@@ -201,10 +202,10 @@ router.post('/review/:id/import', (req: Request, res: Response) => {
 });
 
 // POST /api/news/review/:id/dismiss
-router.post('/review/:id/dismiss', (req: Request, res: Response) => {
+router.post('/review/:id/dismiss', async (req: Request, res: Response) => {
   try {
     const id = parseInt(req.params.id, 10);
-    dismissSearchResult(id);
+    await dismissSearchResult(id);
     res.json({ dismissed: true });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unknown error';
@@ -213,26 +214,20 @@ router.post('/review/:id/dismiss', (req: Request, res: Response) => {
 });
 
 // GET /api/news/scans
-router.get('/scans', (req: Request, res: Response) => {
+router.get('/scans', async (req: Request, res: Response) => {
   try {
-    const db = getDb();
+    const pool = getDb();
     const limit = Math.min(200, Math.max(1, parseInt(String(req.query.limit || '50'), 10) || 50));
 
-    const rows = db.prepare(`
+    const { rows } = await pool.query(`
       SELECT
-        s.id,
-        s.provider,
-        s.search_term,
-        s.scan_timestamp,
-        s.status,
-        s.error_message,
-        s.watchlist_entry_id,
-        wl.name AS watchlist_name
+        s.id, s.provider, s.search_term, s.scan_timestamp, s.status, s.error_message,
+        s.watchlist_entry_id, wl.name AS watchlist_name
       FROM news_search_scans s
       LEFT JOIN watch_list_entries wl ON wl.id = s.watchlist_entry_id
       ORDER BY s.scan_timestamp DESC
-      LIMIT ?
-    `).all(limit);
+      LIMIT $1
+    `, [limit]);
 
     res.json({ data: rows });
   } catch (err) {

@@ -49,48 +49,30 @@ function extractJsonObject(text: string): Record<string, unknown> {
 
 async function generateAiSignalMetadata(signal: Record<string, unknown>) {
   const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey) {
-    throw new Error('OPENAI_API_KEY is not configured');
-  }
+  if (!apiKey) throw new Error('OPENAI_API_KEY is not configured');
 
   const model = process.env.OPENAI_MODEL || 'gpt-4o-mini';
   const inputPayload = {
-    title: signal.title,
-    summary: signal.summary,
-    source_name: signal.source_name,
-    source_type: signal.source_type,
-    url: signal.url,
-    publication_date: signal.publication_date,
-    topic_area: signal.topic_area,
-    focus_area: signal.focus_area,
-    technology_area: signal.technology_area,
-    driver_trend: signal.driver_trend,
-    geographic_relevance: signal.geographic_relevance,
-    industry_relevance: signal.industry_relevance,
-    signal_type: signal.signal_type,
-    analyst_notes: signal.analyst_notes
+    title: signal.title, summary: signal.summary, source_name: signal.source_name,
+    source_type: signal.source_type, url: signal.url, publication_date: signal.publication_date,
+    topic_area: signal.topic_area, focus_area: signal.focus_area,
+    technology_area: signal.technology_area, driver_trend: signal.driver_trend,
+    geographic_relevance: signal.geographic_relevance, industry_relevance: signal.industry_relevance,
+    signal_type: signal.signal_type, analyst_notes: signal.analyst_notes
   };
 
   const response = await fetch(OPENAI_API_URL, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${apiKey}`
-    },
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
     body: JSON.stringify({
-      model,
-      temperature: 0.2,
+      model, temperature: 0.2,
       response_format: { type: 'json_object' },
       messages: [
         {
           role: 'system',
-          content:
-            'You are a strategic intelligence analyst. Return only JSON with these fields: summary, topic_area, focus_area, technology_area, driver_trend, signal_type, geographic_relevance, industry_relevance, confidence_level, novelty, potential_impact, relevance_score, relevance_narrative, tags, analyst_notes. Use concise professional language. summary must be 2-4 sentences. confidence_level/novelty/potential_impact/relevance_score must be integers 1-5. relevance_narrative must be 1-2 sentences explaining the relevance to the watchlist. tags must be an array of 3-8 short tags. signal_type must be one of weak,strong,emerging,established.'
+          content: 'You are a strategic intelligence analyst. Return only JSON with these fields: summary, topic_area, focus_area, technology_area, driver_trend, signal_type, geographic_relevance, industry_relevance, confidence_level, novelty, potential_impact, relevance_score, relevance_narrative, tags, analyst_notes. Use concise professional language. summary must be 2-4 sentences. confidence_level/novelty/potential_impact/relevance_score must be integers 1-5. relevance_narrative must be 1-2 sentences explaining the relevance to the watchlist. tags must be an array of 3-8 short tags. signal_type must be one of weak,strong,emerging,established.'
         },
-        {
-          role: 'user',
-          content: JSON.stringify(inputPayload)
-        }
+        { role: 'user', content: JSON.stringify(inputPayload) }
       ]
     })
   });
@@ -100,14 +82,9 @@ async function generateAiSignalMetadata(signal: Record<string, unknown>) {
     throw new Error(`OpenAI API error (${response.status}): ${bodyText}`);
   }
 
-  const data = await response.json() as {
-    choices?: Array<{ message?: { content?: string } }>;
-  };
-
+  const data = await response.json() as { choices?: Array<{ message?: { content?: string } }> };
   const content = data.choices?.[0]?.message?.content;
-  if (!content) {
-    throw new Error('OpenAI returned an empty response');
-  }
+  if (!content) throw new Error('OpenAI returned an empty response');
 
   const parsed = extractJsonObject(content);
   return {
@@ -116,9 +93,7 @@ async function generateAiSignalMetadata(signal: Record<string, unknown>) {
     focus_area: typeof parsed.focus_area === 'string' ? parsed.focus_area.trim() : null,
     technology_area: typeof parsed.technology_area === 'string' ? parsed.technology_area.trim() : null,
     driver_trend: typeof parsed.driver_trend === 'string' ? parsed.driver_trend.trim() : null,
-    signal_type: typeof parsed.signal_type === 'string' && ALLOWED_SIGNAL_TYPES.has(parsed.signal_type)
-      ? parsed.signal_type
-      : null,
+    signal_type: typeof parsed.signal_type === 'string' && ALLOWED_SIGNAL_TYPES.has(parsed.signal_type) ? parsed.signal_type : null,
     geographic_relevance: typeof parsed.geographic_relevance === 'string' ? parsed.geographic_relevance.trim() : null,
     industry_relevance: typeof parsed.industry_relevance === 'string' ? parsed.industry_relevance.trim() : null,
     confidence_level: clampRating(parsed.confidence_level),
@@ -131,21 +106,13 @@ async function generateAiSignalMetadata(signal: Record<string, unknown>) {
   };
 }
 
-// GET /api/signals - list with filters and pagination
-router.get('/', (req: Request, res: Response) => {
+// GET /api/signals
+router.get('/', async (req: Request, res: Response) => {
   try {
-    const db = getDb();
+    const pool = getDb();
     const {
-      status,
-      topic_area,
-      technology_area,
-      source_type,
-      signal_type,
-      search,
-      page = '1',
-      limit = '20',
-      sort = 'created_at',
-      order = 'desc'
+      status, topic_area, technology_area, source_type, signal_type, search,
+      page = '1', limit = '20', sort = 'created_at', order = 'desc'
     } = req.query as Record<string, string>;
 
     const pageNum = Math.max(1, parseInt(page, 10));
@@ -153,45 +120,38 @@ router.get('/', (req: Request, res: Response) => {
     const offset = (pageNum - 1) * limitNum;
 
     const allowedSorts: Record<string, string> = {
-      created_at: 'created_at',
-      potential_impact: 'potential_impact',
-      confidence_level: 'confidence_level',
-      publication_date: 'publication_date',
-      novelty: 'novelty'
+      created_at: 'created_at', potential_impact: 'potential_impact',
+      confidence_level: 'confidence_level', publication_date: 'publication_date', novelty: 'novelty'
     };
     const sortCol = allowedSorts[sort] || 'created_at';
     const sortDir = order === 'asc' ? 'ASC' : 'DESC';
 
     const conditions: string[] = [];
-    const params: Record<string, string> = {};
+    const values: unknown[] = [];
 
-    if (status) { conditions.push('status = @status'); params.status = status; }
-    if (topic_area) { conditions.push('topic_area = @topic_area'); params.topic_area = topic_area; }
-    if (technology_area) { conditions.push('technology_area = @technology_area'); params.technology_area = technology_area; }
-    if (source_type) { conditions.push('source_type = @source_type'); params.source_type = source_type; }
-    if (signal_type) { conditions.push('signal_type = @signal_type'); params.signal_type = signal_type; }
+    if (status) { conditions.push(`status = $${values.length + 1}`); values.push(status); }
+    if (topic_area) { conditions.push(`topic_area = $${values.length + 1}`); values.push(topic_area); }
+    if (technology_area) { conditions.push(`technology_area = $${values.length + 1}`); values.push(technology_area); }
+    if (source_type) { conditions.push(`source_type = $${values.length + 1}`); values.push(source_type); }
+    if (signal_type) { conditions.push(`signal_type = $${values.length + 1}`); values.push(signal_type); }
     if (search) {
-      conditions.push('(title LIKE @search OR summary LIKE @search)');
-      params.search = `%${search}%`;
+      conditions.push(`(title ILIKE $${values.length + 1} OR summary ILIKE $${values.length + 1})`);
+      values.push(`%${search}%`);
     }
 
     const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
-    const countRow = db.prepare(`SELECT COUNT(*) as total FROM signals ${where}`).get(params) as { total: number };
-    const total = countRow.total;
+    const countResult = await pool.query(`SELECT COUNT(*) as total FROM signals ${where}`, values);
+    const total = parseInt(countResult.rows[0].total, 10);
 
-    const signals = db.prepare(
-      `SELECT * FROM signals ${where} ORDER BY ${sortCol} ${sortDir} LIMIT @limit OFFSET @offset`
-    ).all({ ...params, limit: limitNum, offset });
+    const dataResult = await pool.query(
+      `SELECT * FROM signals ${where} ORDER BY ${sortCol} ${sortDir} LIMIT $${values.length + 1} OFFSET $${values.length + 2}`,
+      [...values, limitNum, offset]
+    );
 
     res.json({
-      data: signals,
-      pagination: {
-        total,
-        page: pageNum,
-        limit: limitNum,
-        pages: Math.ceil(total / limitNum)
-      }
+      data: dataResult.rows,
+      pagination: { total, page: pageNum, limit: limitNum, pages: Math.ceil(total / limitNum) }
     });
   } catch (err) {
     console.error('Error listing signals:', err);
@@ -200,12 +160,12 @@ router.get('/', (req: Request, res: Response) => {
 });
 
 // GET /api/signals/:id
-router.get('/:id', (req: Request, res: Response) => {
+router.get('/:id', async (req: Request, res: Response) => {
   try {
-    const db = getDb();
-    const signal = db.prepare('SELECT * FROM signals WHERE id = ?').get(req.params.id);
-    if (!signal) return res.status(404).json({ error: 'Signal not found' });
-    res.json(signal);
+    const pool = getDb();
+    const { rows } = await pool.query('SELECT * FROM signals WHERE id = $1', [req.params.id]);
+    if (!rows[0]) return res.status(404).json({ error: 'Signal not found' });
+    res.json(rows[0]);
   } catch (err) {
     console.error('Error getting signal:', err);
     res.status(500).json({ error: 'Failed to retrieve signal' });
@@ -213,56 +173,34 @@ router.get('/:id', (req: Request, res: Response) => {
 });
 
 // POST /api/signals
-router.post('/', (req: Request, res: Response) => {
+router.post('/', async (req: Request, res: Response) => {
   try {
-    const db = getDb();
+    const pool = getDb();
     const body = req.body;
-
     if (!body.title) return res.status(400).json({ error: 'title is required' });
 
-    const now = new Date().toISOString();
-    const result = db.prepare(`
+    const { rows } = await pool.query(`
       INSERT INTO signals (
         title, summary, source_name, source_type, url, publication_date, scan_date,
         topic_area, focus_area, technology_area, driver_trend, signal_type,
         geographic_relevance, industry_relevance, confidence_level, novelty,
-        potential_impact, time_horizon, status, tags, analyst_notes,
-        created_at, updated_at
+        potential_impact, time_horizon, status, tags, analyst_notes
       ) VALUES (
-        @title, @summary, @source_name, @source_type, @url, @publication_date, @scan_date,
-        @topic_area, @focus_area, @technology_area, @driver_trend, @signal_type,
-        @geographic_relevance, @industry_relevance, @confidence_level, @novelty,
-        @potential_impact, @time_horizon, @status, @tags, @analyst_notes,
-        @created_at, @updated_at
-      )
-    `).run({
-      title: body.title,
-      summary: body.summary || null,
-      source_name: body.source_name || null,
-      source_type: body.source_type || null,
-      url: body.url || null,
-      publication_date: body.publication_date || null,
-      scan_date: body.scan_date || null,
-      topic_area: body.topic_area || null,
-      focus_area: body.focus_area || null,
-      technology_area: body.technology_area || null,
-      driver_trend: body.driver_trend || null,
-      signal_type: body.signal_type || null,
-      geographic_relevance: body.geographic_relevance || null,
-      industry_relevance: body.industry_relevance || null,
-      confidence_level: body.confidence_level || null,
-      novelty: body.novelty || null,
-      potential_impact: body.potential_impact || null,
-      time_horizon: body.time_horizon || null,
-      status: body.status || 'new',
-      tags: typeof body.tags === 'string' ? body.tags : JSON.stringify(body.tags || []),
-      analyst_notes: body.analyst_notes || null,
-      created_at: now,
-      updated_at: now
-    });
+        $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21
+      ) RETURNING *
+    `, [
+      body.title, body.summary || null, body.source_name || null, body.source_type || null,
+      body.url || null, body.publication_date || null, body.scan_date || null,
+      body.topic_area || null, body.focus_area || null, body.technology_area || null,
+      body.driver_trend || null, body.signal_type || null,
+      body.geographic_relevance || null, body.industry_relevance || null,
+      body.confidence_level || null, body.novelty || null, body.potential_impact || null,
+      body.time_horizon || null, body.status || 'new',
+      typeof body.tags === 'string' ? body.tags : JSON.stringify(body.tags || []),
+      body.analyst_notes || null
+    ]);
 
-    const created = db.prepare('SELECT * FROM signals WHERE id = ?').get(result.lastInsertRowid);
-    res.status(201).json(created);
+    res.status(201).json(rows[0]);
   } catch (err) {
     console.error('Error creating signal:', err);
     res.status(500).json({ error: 'Failed to create signal' });
@@ -270,55 +208,37 @@ router.post('/', (req: Request, res: Response) => {
 });
 
 // PUT /api/signals/:id
-router.put('/:id', (req: Request, res: Response) => {
+router.put('/:id', async (req: Request, res: Response) => {
   try {
-    const db = getDb();
-    const existing = db.prepare('SELECT * FROM signals WHERE id = ?').get(req.params.id);
-    if (!existing) return res.status(404).json({ error: 'Signal not found' });
+    const pool = getDb();
+    const { rows: existing } = await pool.query('SELECT id FROM signals WHERE id = $1', [req.params.id]);
+    if (!existing[0]) return res.status(404).json({ error: 'Signal not found' });
 
     const body = req.body;
-    const now = new Date().toISOString();
-
-    db.prepare(`
+    const { rows } = await pool.query(`
       UPDATE signals SET
-        title = @title, summary = @summary, source_name = @source_name,
-        source_type = @source_type, url = @url, publication_date = @publication_date,
-        scan_date = @scan_date, topic_area = @topic_area, focus_area = @focus_area,
-        technology_area = @technology_area, driver_trend = @driver_trend,
-        signal_type = @signal_type, geographic_relevance = @geographic_relevance,
-        industry_relevance = @industry_relevance, confidence_level = @confidence_level,
-        novelty = @novelty, potential_impact = @potential_impact,
-        time_horizon = @time_horizon, status = @status, tags = @tags,
-        analyst_notes = @analyst_notes, updated_at = @updated_at
-      WHERE id = @id
-    `).run({
-      id: req.params.id,
-      title: body.title,
-      summary: body.summary || null,
-      source_name: body.source_name || null,
-      source_type: body.source_type || null,
-      url: body.url || null,
-      publication_date: body.publication_date || null,
-      scan_date: body.scan_date || null,
-      topic_area: body.topic_area || null,
-      focus_area: body.focus_area || null,
-      technology_area: body.technology_area || null,
-      driver_trend: body.driver_trend || null,
-      signal_type: body.signal_type || null,
-      geographic_relevance: body.geographic_relevance || null,
-      industry_relevance: body.industry_relevance || null,
-      confidence_level: body.confidence_level || null,
-      novelty: body.novelty || null,
-      potential_impact: body.potential_impact || null,
-      time_horizon: body.time_horizon || null,
-      status: body.status || 'new',
-      tags: typeof body.tags === 'string' ? body.tags : JSON.stringify(body.tags || []),
-      analyst_notes: body.analyst_notes || null,
-      updated_at: now
-    });
+        title=$1, summary=$2, source_name=$3, source_type=$4, url=$5,
+        publication_date=$6, scan_date=$7, topic_area=$8, focus_area=$9,
+        technology_area=$10, driver_trend=$11, signal_type=$12,
+        geographic_relevance=$13, industry_relevance=$14, confidence_level=$15,
+        novelty=$16, potential_impact=$17, time_horizon=$18, status=$19,
+        tags=$20, analyst_notes=$21, updated_at=NOW()
+      WHERE id=$22
+      RETURNING *
+    `, [
+      body.title, body.summary || null, body.source_name || null, body.source_type || null,
+      body.url || null, body.publication_date || null, body.scan_date || null,
+      body.topic_area || null, body.focus_area || null, body.technology_area || null,
+      body.driver_trend || null, body.signal_type || null,
+      body.geographic_relevance || null, body.industry_relevance || null,
+      body.confidence_level || null, body.novelty || null, body.potential_impact || null,
+      body.time_horizon || null, body.status || 'new',
+      typeof body.tags === 'string' ? body.tags : JSON.stringify(body.tags || []),
+      body.analyst_notes || null,
+      req.params.id
+    ]);
 
-    const updated = db.prepare('SELECT * FROM signals WHERE id = ?').get(req.params.id);
-    res.json(updated);
+    res.json(rows[0]);
   } catch (err) {
     console.error('Error updating signal:', err);
     res.status(500).json({ error: 'Failed to update signal' });
@@ -328,8 +248,9 @@ router.put('/:id', (req: Request, res: Response) => {
 // POST /api/signals/:id/ai-enrich
 router.post('/:id/ai-enrich', async (req: Request, res: Response) => {
   try {
-    const db = getDb();
-    const existing = db.prepare('SELECT * FROM signals WHERE id = ?').get(req.params.id) as Record<string, unknown> | undefined;
+    const pool = getDb();
+    const { rows } = await pool.query('SELECT * FROM signals WHERE id = $1', [req.params.id]);
+    const existing = rows[0] as Record<string, unknown> | undefined;
     if (!existing) return res.status(404).json({ error: 'Signal not found' });
 
     const suggestion = await generateAiSignalMetadata(existing);
@@ -339,48 +260,34 @@ router.post('/:id/ai-enrich', async (req: Request, res: Response) => {
       return res.json({ applied: false, suggestion });
     }
 
-    const now = new Date().toISOString();
-    db.prepare(`
+    const { rows: updated } = await pool.query(`
       UPDATE signals SET
-        summary = @summary,
-        topic_area = @topic_area,
-        focus_area = @focus_area,
-        technology_area = @technology_area,
-        driver_trend = @driver_trend,
-        signal_type = @signal_type,
-        geographic_relevance = @geographic_relevance,
-        industry_relevance = @industry_relevance,
-        confidence_level = @confidence_level,
-        novelty = @novelty,
-        potential_impact = @potential_impact,
-        relevance_score = @relevance_score,
-        relevance_narrative = @relevance_narrative,
-        tags = @tags,
-        analyst_notes = @analyst_notes,
-        updated_at = @updated_at
-      WHERE id = @id
-    `).run({
-      id: req.params.id,
-      summary: suggestion.summary || existing.summary || null,
-      topic_area: suggestion.topic_area || existing.topic_area || null,
-      focus_area: suggestion.focus_area || existing.focus_area || null,
-      technology_area: suggestion.technology_area || existing.technology_area || null,
-      driver_trend: suggestion.driver_trend || existing.driver_trend || null,
-      signal_type: suggestion.signal_type || existing.signal_type || null,
-      geographic_relevance: suggestion.geographic_relevance || existing.geographic_relevance || null,
-      industry_relevance: suggestion.industry_relevance || existing.industry_relevance || null,
-      confidence_level: suggestion.confidence_level ?? existing.confidence_level ?? null,
-      novelty: suggestion.novelty ?? existing.novelty ?? null,
-      potential_impact: suggestion.potential_impact ?? existing.potential_impact ?? null,
-      relevance_score: suggestion.relevance_score ?? existing.relevance_score ?? null,
-      relevance_narrative: suggestion.relevance_narrative || existing.relevance_narrative || null,
-      tags: suggestion.tags || existing.tags || '[]',
-      analyst_notes: suggestion.analyst_notes || existing.analyst_notes || null,
-      updated_at: now
-    });
+        summary=$1, topic_area=$2, focus_area=$3, technology_area=$4, driver_trend=$5,
+        signal_type=$6, geographic_relevance=$7, industry_relevance=$8,
+        confidence_level=$9, novelty=$10, potential_impact=$11, relevance_score=$12,
+        relevance_narrative=$13, tags=$14, analyst_notes=$15, updated_at=NOW()
+      WHERE id=$16
+      RETURNING *
+    `, [
+      suggestion.summary || existing.summary || null,
+      suggestion.topic_area || existing.topic_area || null,
+      suggestion.focus_area || existing.focus_area || null,
+      suggestion.technology_area || existing.technology_area || null,
+      suggestion.driver_trend || existing.driver_trend || null,
+      suggestion.signal_type || existing.signal_type || null,
+      suggestion.geographic_relevance || existing.geographic_relevance || null,
+      suggestion.industry_relevance || existing.industry_relevance || null,
+      suggestion.confidence_level ?? existing.confidence_level ?? null,
+      suggestion.novelty ?? existing.novelty ?? null,
+      suggestion.potential_impact ?? existing.potential_impact ?? null,
+      suggestion.relevance_score ?? existing.relevance_score ?? null,
+      suggestion.relevance_narrative || existing.relevance_narrative || null,
+      suggestion.tags || existing.tags || '[]',
+      suggestion.analyst_notes || existing.analyst_notes || null,
+      req.params.id
+    ]);
 
-    const updated = db.prepare('SELECT * FROM signals WHERE id = ?').get(req.params.id);
-    return res.json({ applied: true, suggestion, signal: updated });
+    return res.json({ applied: true, suggestion, signal: updated[0] });
   } catch (err) {
     console.error('Error generating AI enrichment:', err);
     const message = err instanceof Error ? err.message : 'Failed to generate AI enrichment';
@@ -389,22 +296,19 @@ router.post('/:id/ai-enrich', async (req: Request, res: Response) => {
 });
 
 // DELETE /api/signals/:id
-router.delete('/:id', (req: Request, res: Response) => {
+router.delete('/:id', async (req: Request, res: Response) => {
   try {
-    const db = getDb();
-    const existing = db.prepare('SELECT id FROM signals WHERE id = ?').get(req.params.id);
-    if (!existing) return res.status(404).json({ error: 'Signal not found' });
+    const pool = getDb();
+    const { rows } = await pool.query('SELECT id FROM signals WHERE id = $1', [req.params.id]);
+    if (!rows[0]) return res.status(404).json({ error: 'Signal not found' });
 
-    // Keep review rows but detach their imported signal reference before deleting.
-    db.prepare(`
+    await pool.query(`
       UPDATE news_search_results
-      SET imported_signal_id = NULL,
-          review_status = 'new',
-          updated_at = CURRENT_TIMESTAMP
-      WHERE imported_signal_id = ?
-    `).run(req.params.id);
+      SET imported_signal_id = NULL, review_status = 'new', updated_at = NOW()
+      WHERE imported_signal_id = $1
+    `, [req.params.id]);
 
-    db.prepare('DELETE FROM signals WHERE id = ?').run(req.params.id);
+    await pool.query('DELETE FROM signals WHERE id = $1', [req.params.id]);
     res.json({ message: 'Signal deleted successfully' });
   } catch (err) {
     console.error('Error deleting signal:', err);

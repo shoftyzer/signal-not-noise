@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useParams, Link, useNavigate } from 'react-router-dom';
+import { useParams, Link, useNavigate, useLocation } from 'react-router-dom';
 import api from '../api';
 import { Signal } from '../types/signal';
 
@@ -40,6 +40,12 @@ function RatingBar({ label, value }: { label: string; value?: number }) {
 export default function SignalDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const location = useLocation();
+  const navState = location.state as { ids?: number[]; index?: number } | null;
+  const navIds = navState?.ids;
+  const currentIndex = navIds ? navIds.indexOf(Number(id)) : -1;
+  const prevId = currentIndex > 0 ? navIds![currentIndex - 1] : null;
+  const nextId = navIds && currentIndex >= 0 && currentIndex < navIds.length - 1 ? navIds[currentIndex + 1] : null;
   const [signal, setSignal] = useState<Signal | null>(null);
   const [loading, setLoading] = useState(true);
   const [deleting, setDeleting] = useState(false);
@@ -91,8 +97,33 @@ export default function SignalDetail() {
 
   return (
     <div className="p-6 max-w-4xl mx-auto">
-      <div className="flex items-center gap-3 mb-6">
+      <div className="flex items-center justify-between gap-3 mb-6">
         <Link to="/signals" className="text-slate-400 hover:text-slate-600 text-sm">← Back to Signals</Link>
+        {navIds && (
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-slate-400">{currentIndex + 1} of {navIds.length}</span>
+            <Link
+              to={prevId ? `/signals/${prevId}` : '#'}
+              state={{ ids: navIds, index: currentIndex - 1 }}
+              aria-disabled={!prevId}
+              className={`px-3 py-1.5 rounded-lg border text-sm transition-colors ${
+                prevId ? 'border-slate-200 text-slate-600 hover:bg-slate-100' : 'border-slate-100 text-slate-300 pointer-events-none'
+              }`}
+            >
+              ← Prev
+            </Link>
+            <Link
+              to={nextId ? `/signals/${nextId}` : '#'}
+              state={{ ids: navIds, index: currentIndex + 1 }}
+              aria-disabled={!nextId}
+              className={`px-3 py-1.5 rounded-lg border text-sm transition-colors ${
+                nextId ? 'border-slate-200 text-slate-600 hover:bg-slate-100' : 'border-slate-100 text-slate-300 pointer-events-none'
+              }`}
+            >
+              Next →
+            </Link>
+          </div>
+        )}
       </div>
 
       <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">

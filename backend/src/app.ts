@@ -2,7 +2,6 @@ import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import rateLimit from 'express-rate-limit';
-import path from 'path';
 import { initDb } from './db/schema';
 import signalsRouter from './routes/signals';
 import dashboardRouter from './routes/dashboard';
@@ -35,13 +34,6 @@ app.use('/api/news', newsSearchRouter);
 
 app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
-});
-
-// Serve built frontend if available
-const frontendDist = path.join(__dirname, '../../frontend/dist');
-app.use(express.static(frontendDist));
-app.get('*', (_req, res) => {
-  res.sendFile(path.join(frontendDist, 'index.html'));
 });
 
 initDb();

@@ -85,7 +85,7 @@ async function generateAiSignalMetadata(signal: Record<string, unknown>) {
         {
           role: 'system',
           content:
-            'You are a strategic intelligence analyst. Return only JSON with these fields: summary, topic_area, focus_area, technology_area, driver_trend, signal_type, geographic_relevance, industry_relevance, confidence_level, novelty, potential_impact, tags, analyst_notes. Use concise professional language. summary must be 2-4 sentences. confidence_level/novelty/potential_impact must be integers 1-5. tags must be an array of 3-8 short tags. signal_type must be one of weak,strong,emerging,established.'
+            'You are a strategic intelligence analyst. Return only JSON with these fields: summary, topic_area, focus_area, technology_area, driver_trend, signal_type, geographic_relevance, industry_relevance, confidence_level, novelty, potential_impact, relevance_score, relevance_narrative, tags, analyst_notes. Use concise professional language. summary must be 2-4 sentences. confidence_level/novelty/potential_impact/relevance_score must be integers 1-5. relevance_narrative must be 1-2 sentences explaining the relevance to the watchlist. tags must be an array of 3-8 short tags. signal_type must be one of weak,strong,emerging,established.'
         },
         {
           role: 'user',
@@ -124,6 +124,8 @@ async function generateAiSignalMetadata(signal: Record<string, unknown>) {
     confidence_level: clampRating(parsed.confidence_level),
     novelty: clampRating(parsed.novelty),
     potential_impact: clampRating(parsed.potential_impact),
+    relevance_score: clampRating(parsed.relevance_score),
+    relevance_narrative: typeof parsed.relevance_narrative === 'string' ? parsed.relevance_narrative.trim() : null,
     tags: normalizeTags(parsed.tags),
     analyst_notes: typeof parsed.analyst_notes === 'string' ? parsed.analyst_notes.trim() : null
   };
@@ -351,6 +353,8 @@ router.post('/:id/ai-enrich', async (req: Request, res: Response) => {
         confidence_level = @confidence_level,
         novelty = @novelty,
         potential_impact = @potential_impact,
+        relevance_score = @relevance_score,
+        relevance_narrative = @relevance_narrative,
         tags = @tags,
         analyst_notes = @analyst_notes,
         updated_at = @updated_at
@@ -368,6 +372,8 @@ router.post('/:id/ai-enrich', async (req: Request, res: Response) => {
       confidence_level: suggestion.confidence_level ?? existing.confidence_level ?? null,
       novelty: suggestion.novelty ?? existing.novelty ?? null,
       potential_impact: suggestion.potential_impact ?? existing.potential_impact ?? null,
+      relevance_score: suggestion.relevance_score ?? existing.relevance_score ?? null,
+      relevance_narrative: suggestion.relevance_narrative || existing.relevance_narrative || null,
       tags: suggestion.tags || existing.tags || '[]',
       analyst_notes: suggestion.analyst_notes || existing.analyst_notes || null,
       updated_at: now
@@ -388,6 +394,16 @@ router.delete('/:id', (req: Request, res: Response) => {
     const db = getDb();
     const existing = db.prepare('SELECT id FROM signals WHERE id = ?').get(req.params.id);
     if (!existing) return res.status(404).json({ error: 'Signal not found' });
+
+    // Keep review rows but detach their imported signal reference before deleting.
+    db.prepare(`
+      UPDATE news_search_results
+      SET imported_signal_id = NULL,
+          review_status = 'new',
+          updated_at = CURRENT_TIMESTAMP
+      WHERE imported_signal_id = ?
+    `).run(req.params.id);
+
     db.prepare('DELETE FROM signals WHERE id = ?').run(req.params.id);
     res.json({ message: 'Signal deleted successfully' });
   } catch (err) {

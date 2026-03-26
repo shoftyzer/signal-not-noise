@@ -1,6 +1,8 @@
 import Database from 'better-sqlite3';
+import fs from 'node:fs';
+import path from 'node:path';
 
-const DB_PATH = '/data/signals.db';
+const DB_PATH = process.env.DB_PATH || path.resolve(process.cwd(), 'data', 'signals.db');
 
 let db: Database.Database;
 
@@ -17,6 +19,7 @@ function ensureColumn(database: Database.Database, table: string, column: string
 
 export function getDb(): Database.Database {
   if (!db) {
+    fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });
     db = new Database(DB_PATH);
     db.pragma('journal_mode = WAL');
     db.pragma('foreign_keys = ON');
@@ -63,6 +66,8 @@ export function initDb(): void {
   ensureColumn(database, 'signals', 'search_term_used', 'TEXT');
   ensureColumn(database, 'signals', 'scan_timestamp', 'TEXT');
   ensureColumn(database, 'signals', 'raw_payload', 'TEXT');
+  ensureColumn(database, 'signals', 'relevance_score', 'INTEGER CHECK(relevance_score BETWEEN 1 AND 5)');
+  ensureColumn(database, 'signals', 'relevance_narrative', 'TEXT');
 
   database.exec(`
     CREATE TABLE IF NOT EXISTS watch_list_entries (

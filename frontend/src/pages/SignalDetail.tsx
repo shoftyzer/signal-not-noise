@@ -154,6 +154,13 @@ export default function SignalDetail() {
               </div>
             )}
 
+            {signal.relevance_narrative && (
+              <div className="bg-indigo-50 border border-indigo-200 rounded-lg p-4">
+                <h3 className="text-xs font-semibold text-indigo-700 uppercase tracking-wide mb-2">Relevance Narrative</h3>
+                <p className="text-sm text-indigo-900 leading-relaxed">{signal.relevance_narrative}</p>
+              </div>
+            )}
+
             <dl className="grid grid-cols-2 gap-4">
               <Field label="Topic Area" value={signal.topic_area} />
               <Field label="Focus Area" value={signal.focus_area} />
@@ -195,6 +202,7 @@ export default function SignalDetail() {
               <RatingBar label="Confidence Level" value={signal.confidence_level} />
               <RatingBar label="Novelty" value={signal.novelty} />
               <RatingBar label="Potential Impact" value={signal.potential_impact} />
+              <RatingBar label="Relevance Score" value={signal.relevance_score} />
             </div>
 
             <div className="bg-slate-50 rounded-lg p-4 space-y-3">

@@ -22,6 +22,8 @@ export interface Signal {
   confidence_level?: number;
   novelty?: number;
   potential_impact?: number;
+  relevance_score?: number;
+  relevance_narrative?: string;
   time_horizon?: TimeHorizon;
   status: SignalStatus;
   tags?: string;

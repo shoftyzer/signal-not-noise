@@ -169,7 +169,6 @@ export async function runExternalSearch(params: SearchRunParams) {
     const getArticleIdByUrl = db.prepare(
       'SELECT id FROM news_articles WHERE normalized_url = ?'
     );
-
     const insertSearchResult = db.prepare(`
       INSERT OR IGNORE INTO news_search_results (
         scan_id, article_id, watchlist_entry_id, search_term, scan_timestamp,
@@ -202,7 +201,9 @@ export async function runExternalSearch(params: SearchRunParams) {
         updated_at: now
       };
 
-      if (externalId) {
+      const urlAlreadyExists = Boolean(getArticleIdByUrl.get(normalized));
+
+      if (externalId && !urlAlreadyExists) {
         upsertArticleByExternalId.run(row);
       } else {
         upsertArticleByUrl.run(row);

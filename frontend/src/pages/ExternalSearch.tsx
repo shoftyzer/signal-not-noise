@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import axios from 'axios';
+import api from '../api';
 import { NewsReviewCandidate, WatchListEntry } from '../types/signal';
 
 interface WatchListResponse {
@@ -38,7 +38,7 @@ export default function ExternalSearch() {
 
   async function loadWatchList() {
     try {
-      const res = await axios.get<WatchListResponse>('/api/watchlist');
+      const res = await api.get<WatchListResponse>('/api/watchlist');
       setWatchList(res.data.data);
     } catch (err) {
       console.error(err);
@@ -47,7 +47,7 @@ export default function ExternalSearch() {
 
   async function loadReviewRows(status = reviewStatus) {
     try {
-      const res = await axios.get<ReviewResponse>('/api/news/review', {
+      const res = await api.get<ReviewResponse>('/api/news/review', {
         params: { review_status: status, limit: 100 }
       });
       setReviewRows(res.data.data);
@@ -73,7 +73,7 @@ export default function ExternalSearch() {
     try {
       setRunning(true);
       setError(null);
-      const res = await axios.post<SearchRunResponse>('/api/news/search', {
+      const res = await api.post<SearchRunResponse>('/api/news/search', {
         searchTerm: manualQuery,
         sourceFilter: sourceFilter || undefined,
         language: language || undefined,
@@ -102,7 +102,7 @@ export default function ExternalSearch() {
     try {
       setRunning(true);
       setError(null);
-      const res = await axios.post<SearchRunResponse>(`/api/news/search/watchlist/${selectedWatchId}`, {
+      const res = await api.post<SearchRunResponse>(`/api/news/search/watchlist/${selectedWatchId}`, {
         autoIngest
       });
       setLastRun(res.data);
@@ -120,7 +120,7 @@ export default function ExternalSearch() {
     try {
       setRunning(true);
       setError(null);
-      await axios.post('/api/news/search/watchlist-active', {
+      await api.post('/api/news/search/watchlist-active', {
         maxRuns: activeWatch.length,
         autoIngest
       });
@@ -136,7 +136,7 @@ export default function ExternalSearch() {
 
   async function importCandidate(id: number) {
     try {
-      await axios.post(`/api/news/review/${id}/import`, { status: 'new' });
+      await api.post(`/api/news/review/${id}/import`, { status: 'new' });
       await loadReviewRows();
     } catch (err: unknown) {
       console.error(err);
@@ -146,7 +146,7 @@ export default function ExternalSearch() {
 
   async function dismissCandidate(id: number) {
     try {
-      await axios.post(`/api/news/review/${id}/dismiss`);
+      await api.post(`/api/news/review/${id}/dismiss`);
       await loadReviewRows();
     } catch (err: unknown) {
       console.error(err);

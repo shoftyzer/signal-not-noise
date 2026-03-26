@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import axios from 'axios';
+import api from '../api';
 import { Signal, SignalFormData } from '../types/signal';
 
 const SOURCE_TYPES = ['article', 'paper', 'announcement', 'regulatory', 'patent', 'event', 'other'];
@@ -41,7 +41,7 @@ export default function SignalForm() {
 
   useEffect(() => {
     if (!isEdit) return;
-    axios.get<Signal>(`/api/signals/${id}`).then(res => {
+    api.get<Signal>(`/api/signals/${id}`).then(res => {
       const s = res.data;
       const tags: string[] = s.tags ? JSON.parse(s.tags) : [];
       setForm({
@@ -86,10 +86,10 @@ export default function SignalForm() {
 
     try {
       if (isEdit) {
-        await axios.put(`/api/signals/${id}`, payload);
+        await api.put(`/api/signals/${id}`, payload);
         navigate(`/signals/${id}`);
       } else {
-        const res = await axios.post<Signal>('/api/signals', payload);
+        const res = await api.post<Signal>('/api/signals', payload);
         navigate(`/signals/${res.data.id}`);
       }
     } catch (err) {

@@ -4,7 +4,7 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell, Legend
 } from 'recharts';
-import axios from 'axios';
+import api from '../api';
 import { DashboardStats } from '../types/signal';
 
 const STATUS_COLORS: Record<string, string> = {
@@ -22,7 +22,7 @@ export default function Dashboard() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    axios.get<DashboardStats>('/api/dashboard')
+    api.get<DashboardStats>('/api/dashboard')
       .then(res => { setStats(res.data); setLoading(false); })
       .catch(err => { setError(err.message); setLoading(false); });
   }, []);

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
-import axios from 'axios';
+import api from '../api';
 import { Signal } from '../types/signal';
 
 const statusColors: Record<string, string> = {
@@ -48,7 +48,7 @@ export default function SignalDetail() {
   const [aiError, setAiError] = useState<string | null>(null);
 
   useEffect(() => {
-    axios.get<Signal>(`/api/signals/${id}`)
+    api.get<Signal>(`/api/signals/${id}`)
       .then(res => { setSignal(res.data); setLoading(false); })
       .catch(() => setLoading(false));
   }, [id]);
@@ -57,7 +57,7 @@ export default function SignalDetail() {
     if (!confirm('Are you sure you want to delete this signal?')) return;
     setDeleting(true);
     try {
-      await axios.delete(`/api/signals/${id}`);
+      await api.delete(`/api/signals/${id}`);
       navigate('/signals');
     } catch (err) {
       console.error('Delete failed:', err);
@@ -70,7 +70,7 @@ export default function SignalDetail() {
     setAiError(null);
     setAiMessage(null);
     try {
-      const res = await axios.post<{ applied: boolean; signal: Signal }>(`/api/signals/${id}/ai-enrich`, { apply: true });
+      const res = await api.post<{ applied: boolean; signal: Signal }>(`/api/signals/${id}/ai-enrich`, { apply: true });
       if (res.data.signal) {
         setSignal(res.data.signal);
       }

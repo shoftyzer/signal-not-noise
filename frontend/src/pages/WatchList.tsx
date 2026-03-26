@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import axios from 'axios';
+import api from '../api';
 import { WatchListEntry } from '../types/signal';
 
 interface WatchListResponse {
@@ -75,7 +75,7 @@ export default function WatchList() {
       const params: Record<string, string> = {};
       if (filterStatus) params.status = filterStatus;
       if (search.trim()) params.search = search.trim();
-      const res = await axios.get<WatchListResponse>('/api/watchlist', { params });
+      const res = await api.get<WatchListResponse>('/api/watchlist', { params });
       setRows(res.data.data);
       setError(null);
     } catch (err) {
@@ -159,9 +159,9 @@ export default function WatchList() {
     try {
       setSaving(true);
       if (editingId) {
-        await axios.put(`/api/watchlist/${editingId}`, payload);
+        await api.put(`/api/watchlist/${editingId}`, payload);
       } else {
-        await axios.post('/api/watchlist', payload);
+        await api.post('/api/watchlist', payload);
       }
       setError(null);
       beginCreate();
@@ -177,7 +177,7 @@ export default function WatchList() {
   async function removeRow(id: number) {
     if (!window.confirm('Delete this watch list entry?')) return;
     try {
-      await axios.delete(`/api/watchlist/${id}`);
+      await api.delete(`/api/watchlist/${id}`);
       await loadData();
     } catch (err) {
       console.error(err);
@@ -187,7 +187,7 @@ export default function WatchList() {
 
   async function setStatus(id: number, status: 'active' | 'paused' | 'archived') {
     try {
-      await axios.patch(`/api/watchlist/${id}/status`, { status });
+      await api.patch(`/api/watchlist/${id}/status`, { status });
       await loadData();
     } catch (err) {
       console.error(err);

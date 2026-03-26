@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import axios from 'axios';
+import api from '../api';
 import SignalCard from '../components/SignalCard';
 import { Signal, PaginatedSignals } from '../types/signal';
 
@@ -35,13 +35,13 @@ export default function SignalList() {
     if (signal_type) params.signal_type = signal_type;
     if (search) params.search = search;
 
-    axios.get<PaginatedSignals>('/api/signals', { params })
+    api.get<PaginatedSignals>('/api/signals', { params })
       .then(res => { setResult(res.data); setLoading(false); })
       .catch(() => setLoading(false));
   }, [page, sort, order, status, topic_area, technology_area, source_type, signal_type, search]);
 
   useEffect(() => {
-    axios.get<PaginatedSignals>('/api/signals', { params: { limit: '200' } }).then(res => {
+    api.get<PaginatedSignals>('/api/signals', { params: { limit: '200' } }).then(res => {
       const topics = [...new Set(res.data.data.map((s: Signal) => s.topic_area).filter(Boolean))] as string[];
       const techs = [...new Set(res.data.data.map((s: Signal) => s.technology_area).filter(Boolean))] as string[];
       setTopicAreas(topics.sort());

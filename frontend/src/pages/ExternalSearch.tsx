@@ -35,6 +35,8 @@ export default function ExternalSearch() {
   const [running, setRunning] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [lastRun, setLastRun] = useState<SearchRunResponse | null>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const [bulkActing, setBulkActing] = useState(false);
 
   async function loadWatchList() {
     try {
@@ -51,6 +53,7 @@ export default function ExternalSearch() {
         params: { review_status: status, limit: 100 }
       });
       setReviewRows(res.data.data);
+      setSelectedIds(new Set());
     } catch (err) {
       console.error(err);
       setError('Failed to load review queue');
@@ -154,6 +157,39 @@ export default function ExternalSearch() {
     }
   }
 
+  function toggleSelect(id: number) {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  }
+
+  function toggleSelectAll() {
+    const newIds = reviewRows.filter(r => r.review_status === 'new').map(r => r.id);
+    if (newIds.every(id => selectedIds.has(id))) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(newIds));
+    }
+  }
+
+  async function bulkDismiss() {
+    if (!confirm(`Dismiss ${selectedIds.size} candidate(s)?`)) return;
+    setBulkActing(true);
+    await Promise.all([...selectedIds].map(id => api.post(`/api/news/review/${id}/dismiss`)));
+    setBulkActing(false);
+    await loadReviewRows();
+  }
+
+  async function bulkImport() {
+    if (!confirm(`Import ${selectedIds.size} candidate(s) as signals?`)) return;
+    setBulkActing(true);
+    await Promise.all([...selectedIds].map(id => api.post(`/api/news/review/${id}/import`, { status: 'new' })));
+    setBulkActing(false);
+    await loadReviewRows();
+  }
+
   return (
     <div className="p-6 max-w-7xl mx-auto space-y-6">
       <div>
@@ -236,22 +272,58 @@ export default function ExternalSearch() {
           </div>
         </div>
 
+        {/* Bulk action bar */}
+        {selectedIds.size > 0 && (
+          <div className="bg-indigo-50 border border-indigo-200 rounded-xl px-4 py-2.5 mb-3 flex items-center gap-4">
+            <span className="text-sm text-indigo-700 font-medium">{selectedIds.size} selected</span>
+            <button onClick={bulkImport} disabled={bulkActing} className="bg-indigo-600 text-white px-3 py-1.5 rounded-lg text-sm font-medium hover:bg-indigo-700 transition-colors disabled:opacity-50">
+              {bulkActing ? 'Working...' : `Import ${selectedIds.size}`}
+            </button>
+            <button onClick={bulkDismiss} disabled={bulkActing} className="border border-slate-300 text-slate-600 px-3 py-1.5 rounded-lg text-sm font-medium hover:bg-slate-100 transition-colors disabled:opacity-50">
+              {bulkActing ? 'Working...' : `Dismiss ${selectedIds.size}`}
+            </button>
+            <button onClick={() => setSelectedIds(new Set())} className="text-sm text-slate-400 hover:text-slate-600">Clear</button>
+          </div>
+        )}
+
         {reviewRows.length === 0 ? (
           <div className="text-sm text-slate-400 py-6">No review candidates.</div>
         ) : (
           <div className="space-y-3">
+            {/* Select-all row */}
+            {reviewStatus === 'new' && (
+              <div className="flex items-center gap-2 px-1 pb-1 border-b border-slate-100">
+                <input
+                  type="checkbox"
+                  className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-300"
+                  checked={reviewRows.filter(r => r.review_status === 'new').every(r => selectedIds.has(r.id))}
+                  onChange={toggleSelectAll}
+                />
+                <span className="text-xs text-slate-500">Select all new ({reviewRows.filter(r => r.review_status === 'new').length})</span>
+              </div>
+            )}
             {reviewRows.map((row) => (
-              <div key={row.id} className="border border-slate-200 rounded-lg p-3">
+              <div key={row.id} className={`border rounded-lg p-3 transition-colors ${selectedIds.has(row.id) ? 'border-indigo-300 bg-indigo-50' : 'border-slate-200'}`}>
                 <div className="flex items-start justify-between gap-4">
-                  <div>
-                    <div className="font-medium text-slate-900">{row.title}</div>
-                    <div className="text-xs text-slate-500 mt-1">
-                      {row.source_name || 'Unknown source'}
-                      {row.publication_date ? ` • ${new Date(row.publication_date).toLocaleDateString()}` : ''}
-                      {row.watchlist_name ? ` • Watch: ${row.watchlist_name}` : ''}
+                  <div className="flex items-start gap-3">
+                    {row.review_status === 'new' && (
+                      <input
+                        type="checkbox"
+                        checked={selectedIds.has(row.id)}
+                        onChange={() => toggleSelect(row.id)}
+                        className="mt-1 rounded border-slate-300 text-indigo-600 focus:ring-indigo-300"
+                      />
+                    )}
+                    <div>
+                      <div className="font-medium text-slate-900">{row.title}</div>
+                      <div className="text-xs text-slate-500 mt-1">
+                        {row.source_name || 'Unknown source'}
+                        {row.publication_date ? ` • ${new Date(row.publication_date).toLocaleDateString()}` : ''}
+                        {row.watchlist_name ? ` • Watch: ${row.watchlist_name}` : ''}
+                      </div>
                     </div>
                   </div>
-                  <span className={`text-xs px-2 py-1 rounded-full ${
+                  <span className={`text-xs px-2 py-1 rounded-full shrink-0 ${
                     row.review_status === 'new' ? 'bg-blue-100 text-blue-700' :
                     row.review_status === 'imported' ? 'bg-green-100 text-green-700' :
                     'bg-slate-200 text-slate-600'

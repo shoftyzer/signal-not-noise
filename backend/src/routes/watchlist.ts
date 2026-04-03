@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { getDb } from '../db/schema';
+import { requireAuth } from '../middleware/auth';
 
 const router = Router();
 
@@ -84,7 +85,7 @@ router.get('/:id', async (req: Request, res: Response) => {
 });
 
 // POST /api/watchlist
-router.post('/', async (req: Request, res: Response) => {
+router.post('/', requireAuth, async (req: Request, res: Response) => {
   try {
     const pool = getDb();
     const body = req.body || {};
@@ -123,7 +124,7 @@ router.post('/', async (req: Request, res: Response) => {
 });
 
 // PUT /api/watchlist/:id
-router.put('/:id', async (req: Request, res: Response) => {
+router.put('/:id', requireAuth, async (req: Request, res: Response) => {
   try {
     const pool = getDb();
     const { rows: existing } = await pool.query('SELECT * FROM watch_list_entries WHERE id = $1', [req.params.id]);
@@ -165,7 +166,7 @@ router.put('/:id', async (req: Request, res: Response) => {
 });
 
 // PATCH /api/watchlist/:id/status
-router.patch('/:id/status', async (req: Request, res: Response) => {
+router.patch('/:id/status', requireAuth, async (req: Request, res: Response) => {
   try {
     const pool = getDb();
     const status = String(req.body?.status || '').toLowerCase();
@@ -187,7 +188,7 @@ router.patch('/:id/status', async (req: Request, res: Response) => {
 });
 
 // POST /api/watchlist/:id/activate
-router.post('/:id/activate', async (req: Request, res: Response) => {
+router.post('/:id/activate', requireAuth, async (req: Request, res: Response) => {
   try {
     const pool = getDb();
     const { rows: existing } = await pool.query('SELECT id FROM watch_list_entries WHERE id = $1', [req.params.id]);
@@ -204,7 +205,7 @@ router.post('/:id/activate', async (req: Request, res: Response) => {
 });
 
 // POST /api/watchlist/:id/deactivate
-router.post('/:id/deactivate', async (req: Request, res: Response) => {
+router.post('/:id/deactivate', requireAuth, async (req: Request, res: Response) => {
   try {
     const pool = getDb();
     const { rows: existing } = await pool.query('SELECT id FROM watch_list_entries WHERE id = $1', [req.params.id]);
@@ -221,7 +222,7 @@ router.post('/:id/deactivate', async (req: Request, res: Response) => {
 });
 
 // DELETE /api/watchlist/:id
-router.delete('/:id', async (req: Request, res: Response) => {
+router.delete('/:id', requireAuth, async (req: Request, res: Response) => {
   try {
     const pool = getDb();
     const { rows } = await pool.query('SELECT id FROM watch_list_entries WHERE id = $1', [req.params.id]);

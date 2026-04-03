@@ -13,6 +13,7 @@ export interface SearchRunParams {
   createdBy?: string;
   autoIngest?: boolean;
   importStatus?: string;
+  cutoffDate?: string;
 }
 
 interface WatchListEntrySummary {
@@ -111,6 +112,10 @@ export async function runExternalSearch(params: SearchRunParams) {
     const insertedResults: Array<{ searchResultId: number; articleId: number }> = [];
 
     for (const article of response.articles) {
+      // Discard articles published before the cutoff date
+      if (params.cutoffDate && article.publishedAt) {
+        if (new Date(article.publishedAt) < new Date(params.cutoffDate)) continue;
+      }
       const externalId = article.externalId || null;
       const normalized = normalizeUrl(article.url);
       const articleRow = [
@@ -124,39 +129,25 @@ export async function runExternalSearch(params: SearchRunParams) {
         now, now
       ];
 
-      // Upsert article
-      if (externalId) {
-        await pool.query(`
-          INSERT INTO news_articles (
-            provider, external_id, title, source_name, author, description, content_snippet,
-            url, normalized_url, publication_date, language, raw_payload, created_at, updated_at
-          ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
-          ON CONFLICT (provider, external_id) WHERE external_id IS NOT NULL
-          DO UPDATE SET
-            title=EXCLUDED.title, source_name=EXCLUDED.source_name, author=EXCLUDED.author,
-            description=EXCLUDED.description, content_snippet=EXCLUDED.content_snippet,
-            url=EXCLUDED.url, publication_date=EXCLUDED.publication_date,
-            language=EXCLUDED.language, raw_payload=EXCLUDED.raw_payload, updated_at=EXCLUDED.updated_at
-        `, articleRow);
-      } else {
-        await pool.query(`
-          INSERT INTO news_articles (
-            provider, external_id, title, source_name, author, description, content_snippet,
-            url, normalized_url, publication_date, language, raw_payload, created_at, updated_at
-          ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
-          ON CONFLICT (normalized_url)
-          DO UPDATE SET
-            title=EXCLUDED.title, source_name=EXCLUDED.source_name, author=EXCLUDED.author,
-            description=EXCLUDED.description, content_snippet=EXCLUDED.content_snippet,
-            url=EXCLUDED.url, publication_date=EXCLUDED.publication_date,
-            language=EXCLUDED.language, raw_payload=EXCLUDED.raw_payload, updated_at=EXCLUDED.updated_at
-        `, articleRow);
-      }
+      // Upsert article — always conflict on normalized_url (global dedup key).
+      // Also update external_id/provider so that info is not lost.
+      await pool.query(`
+        INSERT INTO news_articles (
+          provider, external_id, title, source_name, author, description, content_snippet,
+          url, normalized_url, publication_date, language, raw_payload, created_at, updated_at
+        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
+        ON CONFLICT (normalized_url)
+        DO UPDATE SET
+          provider=COALESCE(EXCLUDED.provider, news_articles.provider),
+          external_id=COALESCE(EXCLUDED.external_id, news_articles.external_id),
+          title=EXCLUDED.title, source_name=EXCLUDED.source_name, author=EXCLUDED.author,
+          description=EXCLUDED.description, content_snippet=EXCLUDED.content_snippet,
+          url=EXCLUDED.url, publication_date=EXCLUDED.publication_date,
+          language=EXCLUDED.language, raw_payload=EXCLUDED.raw_payload, updated_at=EXCLUDED.updated_at
+      `, articleRow);
 
-      // Look up article id
-      const lookupResult = externalId
-        ? await pool.query('SELECT id FROM news_articles WHERE provider=$1 AND external_id=$2', [params.provider.providerName, externalId])
-        : await pool.query('SELECT id FROM news_articles WHERE normalized_url=$1', [normalized]);
+      // Look up article id by normalized_url (the single dedup key)
+      const lookupResult = await pool.query('SELECT id FROM news_articles WHERE normalized_url=$1', [normalized]);
 
       if (!lookupResult.rows[0]) continue;
       const articleId = lookupResult.rows[0].id;
@@ -194,6 +185,14 @@ export async function runExternalSearch(params: SearchRunParams) {
         });
         if (importResult.imported) importedCount += 1;
       }
+    }
+
+    // Stamp last_searched_at on the watchlist entry
+    if (params.watchlistEntryId) {
+      await pool.query(
+        'UPDATE watch_list_entries SET last_searched_at = NOW() WHERE id = $1',
+        [params.watchlistEntryId]
+      );
     }
 
     const reviewResult = await pool.query(`

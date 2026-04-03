@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { getDb } from '../db/schema';
+import { requireAuth } from '../middleware/auth';
 
 const router = Router();
 
@@ -173,7 +174,7 @@ router.get('/:id', async (req: Request, res: Response) => {
 });
 
 // POST /api/signals
-router.post('/', async (req: Request, res: Response) => {
+router.post('/', requireAuth, async (req: Request, res: Response) => {
   try {
     const pool = getDb();
     const body = req.body;
@@ -208,7 +209,7 @@ router.post('/', async (req: Request, res: Response) => {
 });
 
 // PUT /api/signals/:id
-router.put('/:id', async (req: Request, res: Response) => {
+router.put('/:id', requireAuth, async (req: Request, res: Response) => {
   try {
     const pool = getDb();
     const { rows: existing } = await pool.query('SELECT id FROM signals WHERE id = $1', [req.params.id]);
@@ -246,7 +247,7 @@ router.put('/:id', async (req: Request, res: Response) => {
 });
 
 // POST /api/signals/:id/ai-enrich
-router.post('/:id/ai-enrich', async (req: Request, res: Response) => {
+router.post('/:id/ai-enrich', requireAuth, async (req: Request, res: Response) => {
   try {
     const pool = getDb();
     const { rows } = await pool.query('SELECT * FROM signals WHERE id = $1', [req.params.id]);
@@ -296,7 +297,7 @@ router.post('/:id/ai-enrich', async (req: Request, res: Response) => {
 });
 
 // DELETE /api/signals/:id
-router.delete('/:id', async (req: Request, res: Response) => {
+router.delete('/:id', requireAuth, async (req: Request, res: Response) => {
   try {
     const pool = getDb();
     const { rows } = await pool.query('SELECT id FROM signals WHERE id = $1', [req.params.id]);

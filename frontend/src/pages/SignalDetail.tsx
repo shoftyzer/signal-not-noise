@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useParams, Link, useNavigate, useLocation } from 'react-router-dom';
 import api from '../api';
 import { Signal } from '../types/signal';
+import { useAuth } from '../context/AuthContext';
 
 const statusColors: Record<string, string> = {
   new: 'bg-blue-100 text-blue-800 border-blue-200',
@@ -41,6 +42,7 @@ export default function SignalDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const location = useLocation();
+  const { isAuthenticated } = useAuth();
   const navState = location.state as { ids?: number[]; index?: number } | null;
   const navIds = navState?.ids;
   const currentIndex = navIds ? navIds.indexOf(Number(id)) : -1;
@@ -149,15 +151,19 @@ export default function SignalDetail() {
               </div>
             </div>
             <div className="flex gap-2 shrink-0">
-              <button onClick={handleAiEnrich} disabled={aiLoading} className="border border-indigo-200 text-indigo-700 px-4 py-2 rounded-lg text-sm font-medium hover:bg-indigo-50 transition-colors disabled:opacity-50">
-                {aiLoading ? 'Generating...' : 'Generate with AI'}
-              </button>
-              <Link to={`/signals/${signal.id}/edit`} className="bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-indigo-700 transition-colors">
-                Edit
-              </Link>
-              <button onClick={handleDelete} disabled={deleting} className="border border-red-200 text-red-600 px-4 py-2 rounded-lg text-sm font-medium hover:bg-red-50 transition-colors disabled:opacity-50">
-                {deleting ? 'Deleting...' : 'Delete'}
-              </button>
+              {isAuthenticated && (
+                <>
+                  <button onClick={handleAiEnrich} disabled={aiLoading} className="border border-indigo-200 text-indigo-700 px-4 py-2 rounded-lg text-sm font-medium hover:bg-indigo-50 transition-colors disabled:opacity-50">
+                    {aiLoading ? 'Generating...' : 'Generate with AI'}
+                  </button>
+                  <Link to={`/signals/${signal.id}/edit`} className="bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-indigo-700 transition-colors">
+                    Edit
+                  </Link>
+                  <button onClick={handleDelete} disabled={deleting} className="border border-red-200 text-red-600 px-4 py-2 rounded-lg text-sm font-medium hover:bg-red-50 transition-colors disabled:opacity-50">
+                    {deleting ? 'Deleting...' : 'Delete'}
+                  </button>
+                </>
+              )}
             </div>
           </div>
         </div>

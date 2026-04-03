@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import api from '../api';
 import { Signal, PaginatedSignals } from '../types/signal';
+import { useAuth } from '../context/AuthContext';
 
 const SOURCE_TYPES = ['article', 'paper', 'announcement', 'regulatory', 'patent', 'event', 'other'];
 const SIGNAL_TYPES = ['weak', 'strong', 'emerging', 'established'];
@@ -38,6 +39,7 @@ export default function SignalList() {
   const [techAreas, setTechAreas] = useState<string[]>([]);
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [bulkDeleting, setBulkDeleting] = useState(false);
+  const { isAuthenticated } = useAuth();
 
   const status = searchParams.get('status') || '';
   const topic_area = searchParams.get('topic_area') || '';
@@ -169,9 +171,11 @@ export default function SignalList() {
           <button onClick={exportCsv} className="border border-slate-200 text-slate-600 px-4 py-2 rounded-lg text-sm font-medium hover:bg-slate-50 transition-colors">
             Export CSV
           </button>
-          <Link to="/signals/new" className="bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-indigo-700 transition-colors">
-            + Add Signal
-          </Link>
+          {isAuthenticated && (
+            <Link to="/signals/new" className="bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-indigo-700 transition-colors">
+              + Add Signal
+            </Link>
+          )}
         </div>
       </div>
 
@@ -209,7 +213,7 @@ export default function SignalList() {
       </div>
 
       {/* Bulk action bar */}
-      {selectedIds.size > 0 && (
+      {isAuthenticated && selectedIds.size > 0 && (
         <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-2.5 mb-4 flex items-center gap-4">
           <span className="text-sm text-red-700 font-medium">{selectedIds.size} selected</span>
           <button
@@ -236,10 +240,12 @@ export default function SignalList() {
             <table className="w-full text-sm">
               <thead className="bg-slate-50 border-b border-slate-200">
                 <tr>
-                  <th className="px-4 py-3 w-10">
-                    <input type="checkbox" checked={allOnPageSelected} onChange={toggleSelectAll}
-                      className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-300" />
-                  </th>
+                  {isAuthenticated && (
+                    <th className="px-4 py-3 w-10">
+                      <input type="checkbox" checked={allOnPageSelected} onChange={toggleSelectAll}
+                        className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-300" />
+                    </th>
+                  )}
                   <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Title</th>
                   <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Status</th>
                   <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Type</th>
@@ -249,16 +255,18 @@ export default function SignalList() {
                   <SortHeader col="potential_impact" label="Impact" sort={sort} order={order} onToggle={toggleSort} />
                   <SortHeader col="novelty" label="Novelty" sort={sort} order={order} onToggle={toggleSort} />
                   <SortHeader col="created_at" label="Date" sort={sort} order={order} onToggle={toggleSort} />
-                  <th className="px-4 py-3 w-16" />
+                  {isAuthenticated && <th className="px-4 py-3 w-16" />}
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {result?.data.map((signal, i) => (
                   <tr key={signal.id} className={`hover:bg-slate-50 transition-colors ${selectedIds.has(signal.id) ? 'bg-indigo-50' : ''}`}>
-                    <td className="px-4 py-3">
-                      <input type="checkbox" checked={selectedIds.has(signal.id)} onChange={() => toggleSelect(signal.id)}
-                        className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-300" />
-                    </td>
+                    {isAuthenticated && (
+                      <td className="px-4 py-3">
+                        <input type="checkbox" checked={selectedIds.has(signal.id)} onChange={() => toggleSelect(signal.id)}
+                          className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-300" />
+                      </td>
+                    )}
                     <td className="px-4 py-3 max-w-xs">
                       <Link
                         to={`/signals/${signal.id}`}
@@ -280,9 +288,11 @@ export default function SignalList() {
                     <td className="px-4 py-3 text-slate-700 text-center">{signal.potential_impact ?? '—'}</td>
                     <td className="px-4 py-3 text-slate-700 text-center">{signal.novelty ?? '—'}</td>
                     <td className="px-4 py-3 text-slate-500 whitespace-nowrap">{new Date(signal.created_at).toLocaleDateString()}</td>
-                    <td className="px-4 py-3">
-                      <Link to={`/signals/${signal.id}/edit`} className="text-xs text-indigo-600 hover:text-indigo-800 font-medium">Edit</Link>
-                    </td>
+                    {isAuthenticated && (
+                      <td className="px-4 py-3">
+                        <Link to={`/signals/${signal.id}/edit`} className="text-xs text-indigo-600 hover:text-indigo-800 font-medium">Edit</Link>
+                      </td>
+                    )}
                   </tr>
                 ))}
               </tbody>

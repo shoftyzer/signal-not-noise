@@ -1,10 +1,11 @@
 import { Router, Request, Response } from 'express';
 import RSSParser from 'rss-parser';
+import { requireAuth } from '../middleware/auth';
 
 const router = Router();
 const parser = new RSSParser();
 
-router.post('/rss', async (req: Request, res: Response) => {
+router.post('/rss', requireAuth, async (req: Request, res: Response) => {
   const { url } = req.body;
 
   if (!url || typeof url !== 'string') {

@@ -78,8 +78,15 @@ export async function initDb(): Promise<void> {
       created_by TEXT,
       updated_by TEXT,
       created_at TIMESTAMPTZ DEFAULT NOW(),
-      updated_at TIMESTAMPTZ DEFAULT NOW()
+      updated_at TIMESTAMPTZ DEFAULT NOW(),
+      last_searched_at TIMESTAMPTZ
     )
+  `);
+
+  // Migration: add last_searched_at to existing tables
+  await db.query(`
+    ALTER TABLE watch_list_entries
+    ADD COLUMN IF NOT EXISTS last_searched_at TIMESTAMPTZ
   `);
 
   await db.query(`

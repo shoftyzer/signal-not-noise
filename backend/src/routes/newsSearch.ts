@@ -7,6 +7,7 @@ import {
   importSearchResultToSignals,
   dismissSearchResult
 } from '../services/searchService';
+import { requireAuth } from '../middleware/auth';
 
 const router = Router();
 
@@ -35,6 +36,28 @@ function boolFlag(value: unknown): boolean {
   return false;
 }
 
+/**
+ * Returns the effective cutoff date for a watchlist search.
+ * Uses last_searched_at if set, otherwise 3 years ago.
+ */
+function computeCutoffDate(lastSearchedAt?: string | null): string {
+  if (lastSearchedAt) {
+    return new Date(lastSearchedAt).toISOString().split('T')[0];
+  }
+  const d = new Date();
+  d.setFullYear(d.getFullYear() - 3);
+  return d.toISOString().split('T')[0];
+}
+
+/**
+ * Picks the later of two YYYY-MM-DD date strings (or returns whichever is defined).
+ */
+function laterDate(a?: string | null, b?: string | null): string | undefined {
+  if (!a) return b ?? undefined;
+  if (!b) return a;
+  return a > b ? a : b;
+}
+
 async function executeSearch(req: Request, res: Response, params: {
   searchTerm: string;
   watchlistEntryId?: number;
@@ -44,6 +67,7 @@ async function executeSearch(req: Request, res: Response, params: {
   language?: string;
   sortBy?: string;
   autoIngest?: boolean;
+  cutoffDate?: string;
 }) {
   try {
     const provider = getProvider();
@@ -58,7 +82,8 @@ async function executeSearch(req: Request, res: Response, params: {
       sortBy: params.sortBy,
       autoIngest: params.autoIngest,
       importStatus: 'new',
-      createdBy: actor(req)
+      createdBy: actor(req),
+      cutoffDate: params.cutoffDate
     });
 
     res.json(result);
@@ -74,7 +99,7 @@ async function executeSearch(req: Request, res: Response, params: {
 }
 
 // POST /api/news/search
-router.post('/search', async (req: Request, res: Response) => {
+router.post('/search', requireAuth, async (req: Request, res: Response) => {
   const searchTerm = toOptionalString(req.body?.searchTerm || req.body?.query);
   if (!searchTerm) {
     return res.status(400).json({ error: 'searchTerm is required' });
@@ -92,7 +117,7 @@ router.post('/search', async (req: Request, res: Response) => {
 });
 
 // POST /api/news/search/watchlist/:id
-router.post('/search/watchlist/:id', async (req: Request, res: Response) => {
+router.post('/search/watchlist/:id', requireAuth, async (req: Request, res: Response) => {
   try {
     const pool = getDb();
     const { rows } = await pool.query('SELECT * FROM watch_list_entries WHERE id = $1', [req.params.id]);
@@ -103,15 +128,19 @@ router.post('/search/watchlist/:id', async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'Watchlist entry must be active to run scheduled scan' });
     }
 
+    const cutoff = computeCutoffDate(entry.last_searched_at);
+    const effectiveFrom = laterDate(entry.from_date, cutoff);
+
     await executeSearch(req, res, {
       searchTerm: entry.search_query,
       watchlistEntryId: entry.id,
       sourceFilter: entry.source_filter || undefined,
-      fromDate: entry.from_date || undefined,
+      fromDate: effectiveFrom,
       toDate: entry.to_date || undefined,
       language: entry.language || undefined,
       sortBy: entry.sort_by || undefined,
-      autoIngest: boolFlag(req.body?.autoIngest)
+      autoIngest: boolFlag(req.body?.autoIngest),
+      cutoffDate: cutoff
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unknown error';
@@ -120,7 +149,7 @@ router.post('/search/watchlist/:id', async (req: Request, res: Response) => {
 });
 
 // POST /api/news/search/watchlist-active
-router.post('/search/watchlist-active', async (req: Request, res: Response) => {
+router.post('/search/watchlist-active', requireAuth, async (req: Request, res: Response) => {
   try {
     const pool = getDb();
     const { rows: entries } = await pool.query("SELECT * FROM watch_list_entries WHERE status = 'active' ORDER BY priority DESC, updated_at DESC");
@@ -132,18 +161,21 @@ router.post('/search/watchlist-active', async (req: Request, res: Response) => {
     for (const entry of runEntries) {
       try {
         const provider = getProvider();
+        const cutoff = computeCutoffDate(entry.last_searched_at);
+        const effectiveFrom = laterDate(entry.from_date, cutoff);
         const result = await runExternalSearch({
           provider,
           searchTerm: entry.search_query,
           watchlistEntryId: entry.id,
           sourceFilter: entry.source_filter || undefined,
-          fromDate: entry.from_date || undefined,
+          fromDate: effectiveFrom,
           toDate: entry.to_date || undefined,
           language: entry.language || undefined,
           sortBy: entry.sort_by || undefined,
           autoIngest: boolFlag(req.body?.autoIngest),
           importStatus: 'new',
-          createdBy: actor(req)
+          createdBy: actor(req),
+          cutoffDate: cutoff
         });
         runs.push({ watchlistId: entry.id, name: entry.name, ok: true, ...result });
       } catch (error) {
@@ -186,7 +218,7 @@ router.get('/review', async (req: Request, res: Response) => {
 });
 
 // POST /api/news/review/:id/import
-router.post('/review/:id/import', async (req: Request, res: Response) => {
+router.post('/review/:id/import', requireAuth, async (req: Request, res: Response) => {
   try {
     const id = parseInt(req.params.id, 10);
     const result = await importSearchResultToSignals(id, {
@@ -202,7 +234,7 @@ router.post('/review/:id/import', async (req: Request, res: Response) => {
 });
 
 // POST /api/news/review/:id/dismiss
-router.post('/review/:id/dismiss', async (req: Request, res: Response) => {
+router.post('/review/:id/dismiss', requireAuth, async (req: Request, res: Response) => {
   try {
     const id = parseInt(req.params.id, 10);
     await dismissSearchResult(id);

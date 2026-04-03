@@ -8,6 +8,7 @@ import dashboardRouter from './routes/dashboard';
 import ingestRouter from './routes/ingest';
 import watchlistRouter from './routes/watchlist';
 import newsSearchRouter from './routes/newsSearch';
+import authRouter from './routes/auth';
 
 dotenv.config();
 
@@ -32,6 +33,7 @@ app.use('/api/dashboard', dashboardRouter);
 app.use('/api/ingest', ingestRouter);
 app.use('/api/watchlist', watchlistRouter);
 app.use('/api/news', newsSearchRouter);
+app.use('/api/auth', authRouter);
 
 app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });

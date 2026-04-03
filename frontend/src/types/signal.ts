@@ -107,6 +107,7 @@ export interface WatchListEntry {
   updated_by?: string;
   created_at: string;
   updated_at: string;
+  last_searched_at?: string;
 }
 
 export interface NewsReviewCandidate {

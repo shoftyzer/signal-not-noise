@@ -77,7 +77,7 @@ export interface DashboardStats {
   byTopicArea: { topic_area: string; count: number }[];
   byTechnologyArea: { technology_area: string; count: number }[];
   bySourceType: { source_type: string; count: number }[];
-  signalsOverTime: { week: string; count: number }[];
+  signalsOverTime: { month: string; signal_type: string; topic_area: string; count: number }[];
   recentSignals: Partial<Signal>[];
 }
 

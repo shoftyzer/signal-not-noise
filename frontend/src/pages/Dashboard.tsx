@@ -16,10 +16,22 @@ const STATUS_COLORS: Record<string, string> = {
   rejected: '#ef4444',
 };
 
+const SIGNAL_TYPE_COLORS: Record<string, string> = {
+  weak: '#93c5fd',
+  emerging: '#10b981',
+  strong: '#6366f1',
+  established: '#f59e0b',
+  unknown: '#94a3b8',
+};
+
+const ALL_SIGNAL_TYPES = ['weak', 'emerging', 'strong', 'established', 'unknown'];
+
 export default function Dashboard() {
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [selectedType, setSelectedType] = useState<string>('all');
+  const [selectedTopic, setSelectedTopic] = useState<string>('all');
 
   useEffect(() => {
     api.get<DashboardStats>('/api/dashboard')
@@ -30,6 +42,30 @@ export default function Dashboard() {
   if (loading) return <div className="flex items-center justify-center h-64 text-slate-500">Loading dashboard...</div>;
   if (error) return <div className="flex items-center justify-center h-64 text-red-500">Error: {error}</div>;
   if (!stats) return null;
+
+  // Generate all 24 months so empty months still appear on the axis
+  const allMonths: string[] = [];
+  for (let i = 23; i >= 0; i--) {
+    const d = new Date();
+    d.setDate(1);
+    d.setMonth(d.getMonth() - i);
+    allMonths.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`);
+  }
+
+  const filteredOverTime = selectedTopic === 'all'
+    ? stats.signalsOverTime
+    : stats.signalsOverTime.filter(r => r.topic_area === selectedTopic);
+
+  const presentTypes = [...new Set(filteredOverTime.map(r => r.signal_type))];
+  const visibleTypes = selectedType === 'all' ? ALL_SIGNAL_TYPES.filter(t => presentTypes.includes(t)) : [selectedType];
+
+  const chartData = allMonths.map(month => {
+    const row: Record<string, string | number> = { month };
+    for (const t of ALL_SIGNAL_TYPES) {
+      row[t] = filteredOverTime.filter(r => r.month === month && r.signal_type === t).reduce((s, r) => s + r.count, 0);
+    }
+    return row;
+  });
 
   return (
     <div className="p-6 max-w-7xl mx-auto">
@@ -99,14 +135,43 @@ export default function Dashboard() {
 
       {/* Signals Over Time */}
       <div className="bg-white rounded-xl border border-slate-200 p-5 mb-6">
-        <h3 className="text-sm font-semibold text-slate-700 mb-4">Signals Over Time (Last 8 Weeks)</h3>
-        <ResponsiveContainer width="100%" height={200}>
-          <BarChart data={stats.signalsOverTime}>
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-sm font-semibold text-slate-700">Signals Over Time — Last 2 Years (by publish date)</h3>
+          <div className="flex gap-2">
+            <select
+              value={selectedTopic}
+              onChange={e => setSelectedTopic(e.target.value)}
+              className="border border-slate-200 rounded-lg px-3 py-1.5 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-300"
+            >
+              <option value="all">All topics</option>
+              {stats.byTopicArea.map(t => (
+                <option key={t.topic_area} value={t.topic_area}>{t.topic_area}</option>
+              ))}
+            </select>
+            <select
+              value={selectedType}
+              onChange={e => setSelectedType(e.target.value)}
+              className="border border-slate-200 rounded-lg px-3 py-1.5 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-300"
+            >
+              <option value="all">All types</option>
+              <option value="weak">Weak</option>
+              <option value="emerging">Emerging</option>
+              <option value="strong">Strong</option>
+              <option value="established">Established</option>
+              <option value="unknown">Unknown</option>
+            </select>
+          </div>
+        </div>
+        <ResponsiveContainer width="100%" height={220}>
+          <BarChart data={chartData} margin={{ left: 0, right: 8 }}>
             <CartesianGrid strokeDasharray="3 3" vertical={false} />
-            <XAxis dataKey="week" tick={{ fontSize: 11 }} />
+            <XAxis dataKey="month" tick={{ fontSize: 10 }} interval="preserveStartEnd" />
             <YAxis tick={{ fontSize: 12 }} allowDecimals={false} />
             <Tooltip />
-            <Bar dataKey="count" fill="#6366f1" radius={[4, 4, 0, 0]} />
+            {selectedType === 'all' && <Legend />}
+            {visibleTypes.map(t => (
+              <Bar key={t} dataKey={t} stackId={selectedType === 'all' ? 'a' : undefined} fill={SIGNAL_TYPE_COLORS[t]} radius={visibleTypes.indexOf(t) === visibleTypes.length - 1 ? [4, 4, 0, 0] : [0, 0, 0, 0]} />
+            ))}
           </BarChart>
         </ResponsiveContainer>
       </div>

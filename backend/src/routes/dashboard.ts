@@ -38,20 +38,20 @@ router.get('/', async (_req: Request, res: Response) => {
     );
     const bySourceType = bySourceResult.rows.map(r => ({ source_type: r.source_type, count: parseInt(r.count, 10) }));
 
-    const weeksData: { week: string; count: number }[] = [];
-    for (let i = 7; i >= 0; i--) {
-      const weekStart = new Date();
-      weekStart.setDate(weekStart.getDate() - i * 7);
-      weekStart.setHours(0, 0, 0, 0);
-      const weekEnd = new Date(weekStart);
-      weekEnd.setDate(weekEnd.getDate() + 7);
-
-      const r = await pool.query(
-        'SELECT COUNT(*) as count FROM signals WHERE created_at >= $1 AND created_at < $2',
-        [weekStart.toISOString(), weekEnd.toISOString()]
-      );
-      weeksData.push({ week: weekStart.toISOString().split('T')[0], count: parseInt(r.rows[0].count, 10) });
-    }
+    const weeksData: { month: string; signal_type: string; topic_area: string; count: number }[] = [];
+    const overTimeResult = await pool.query(`
+      SELECT
+        TO_CHAR(DATE_TRUNC('month', publication_date::date), 'YYYY-MM') AS month,
+        COALESCE(signal_type, 'unknown') AS signal_type,
+        COALESCE(topic_area, 'Unknown') AS topic_area,
+        COUNT(*)::int AS count
+      FROM signals
+      WHERE publication_date IS NOT NULL
+        AND publication_date::date >= (NOW() - INTERVAL '2 years')
+      GROUP BY month, signal_type, topic_area
+      ORDER BY month ASC
+    `);
+    weeksData.push(...overTimeResult.rows);
 
     const recentResult = await pool.query(
       'SELECT id, title, status, topic_area, signal_type, created_at FROM signals ORDER BY created_at DESC LIMIT 5'

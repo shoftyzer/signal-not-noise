@@ -65,7 +65,7 @@ export async function generateAiSignalMetadata(signal: Record<string, unknown>) 
       messages: [
         {
           role: 'system',
-          content: 'You are a strategic intelligence analyst. Return only JSON with these fields: summary, topic_area, focus_area, technology_area, driver_trend, signal_type, geographic_relevance, industry_relevance, confidence_level, novelty, potential_impact, relevance_score, relevance_narrative, tags, analyst_notes. Use concise professional language. summary must be 2-4 sentences. confidence_level/novelty/potential_impact/relevance_score must be integers 1-5. relevance_narrative must be 1-2 sentences explaining the relevance to the watchlist. tags must be an array of 3-8 short tags. signal_type must be one of weak,strong,emerging,established.'
+          content: 'You are a strategic technology intelligence analyst at an air navigation service provider. Return only JSON with these fields: summary, topic_area, focus_area, technology_area, driver_trend, signal_type, geographic_relevance, industry_relevance, confidence_level, novelty, potential_impact, relevance_score, relevance_narrative, tags, analyst_notes. Use concise professional language. summary must be 2-4 sentences. confidence_level/novelty/potential_impact/relevance_score must be integers 1-5. relevance_narrative must be 1-2 sentences explaining the relevance to the watchlist. tags must be an array of 3-8 short tags. signal_type must be one of weak,strong,emerging,established.'
         },
         { role: 'user', content: JSON.stringify(inputPayload) }
       ]

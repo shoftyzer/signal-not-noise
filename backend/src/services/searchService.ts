@@ -1,5 +1,6 @@
 import { getDb } from '../db/schema';
 import { ExternalSearchProvider, ExternalSearchQuery } from './searchProviders/types';
+import { generateAiSignalMetadata } from './aiService';
 
 export interface SearchRunParams {
   provider: ExternalSearchProvider;
@@ -367,6 +368,41 @@ export async function importSearchResultToSignals(
   ]);
 
   const signalId = signalRows[0].id;
+
+  // Auto-enrich with AI metadata; log but don't fail the import if AI is unavailable
+  try {
+    const { rows: freshSignal } = await pool.query('SELECT * FROM signals WHERE id = $1', [signalId]);
+    if (freshSignal[0]) {
+      const suggestion = await generateAiSignalMetadata(freshSignal[0] as Record<string, unknown>);
+      await pool.query(`
+        UPDATE signals SET
+          summary=$1, topic_area=$2, focus_area=$3, technology_area=$4, driver_trend=$5,
+          signal_type=$6, geographic_relevance=$7, industry_relevance=$8,
+          confidence_level=$9, novelty=$10, potential_impact=$11, relevance_score=$12,
+          relevance_narrative=$13, tags=$14, analyst_notes=$15, updated_at=NOW()
+        WHERE id=$16
+      `, [
+        suggestion.summary || freshSignal[0].summary || null,
+        suggestion.topic_area || freshSignal[0].topic_area || null,
+        suggestion.focus_area || freshSignal[0].focus_area || null,
+        suggestion.technology_area || freshSignal[0].technology_area || null,
+        suggestion.driver_trend || freshSignal[0].driver_trend || null,
+        suggestion.signal_type || freshSignal[0].signal_type || null,
+        suggestion.geographic_relevance || freshSignal[0].geographic_relevance || null,
+        suggestion.industry_relevance || freshSignal[0].industry_relevance || null,
+        suggestion.confidence_level ?? freshSignal[0].confidence_level ?? null,
+        suggestion.novelty ?? freshSignal[0].novelty ?? null,
+        suggestion.potential_impact ?? freshSignal[0].potential_impact ?? null,
+        suggestion.relevance_score ?? freshSignal[0].relevance_score ?? null,
+        suggestion.relevance_narrative || freshSignal[0].relevance_narrative || null,
+        suggestion.tags || freshSignal[0].tags || '[]',
+        suggestion.analyst_notes || freshSignal[0].analyst_notes || null,
+        signalId
+      ]);
+    }
+  } catch (aiErr) {
+    console.warn(`AI enrichment skipped for signal ${signalId}:`, aiErr instanceof Error ? aiErr.message : aiErr);
+  }
 
   await pool.query(
     'UPDATE news_search_results SET review_status=$1, imported_signal_id=$2, updated_at=NOW() WHERE id=$3',

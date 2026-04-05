@@ -48,7 +48,7 @@ export default function SignalList() {
   const signal_type = searchParams.get('signal_type') || '';
   const search = searchParams.get('search') || '';
   const page = parseInt(searchParams.get('page') || '1', 10);
-  const sort = searchParams.get('sort') || 'created_at';
+  const sort = searchParams.get('sort') || 'publication_date';
   const order = searchParams.get('order') || 'desc';
 
   const fetchSignals = useCallback(() => {
@@ -254,7 +254,7 @@ export default function SignalList() {
                   <SortHeader col="confidence_level" label="Conf." sort={sort} order={order} onToggle={toggleSort} />
                   <SortHeader col="potential_impact" label="Impact" sort={sort} order={order} onToggle={toggleSort} />
                   <SortHeader col="novelty" label="Novelty" sort={sort} order={order} onToggle={toggleSort} />
-                  <SortHeader col="created_at" label="Date" sort={sort} order={order} onToggle={toggleSort} />
+                  <SortHeader col="publication_date" label="Published" sort={sort} order={order} onToggle={toggleSort} />
                   {isAuthenticated && <th className="px-4 py-3 w-16" />}
                 </tr>
               </thead>
@@ -287,7 +287,7 @@ export default function SignalList() {
                     <td className="px-4 py-3 text-slate-700 text-center">{signal.confidence_level ?? '—'}</td>
                     <td className="px-4 py-3 text-slate-700 text-center">{signal.potential_impact ?? '—'}</td>
                     <td className="px-4 py-3 text-slate-700 text-center">{signal.novelty ?? '—'}</td>
-                    <td className="px-4 py-3 text-slate-500 whitespace-nowrap">{new Date(signal.created_at).toLocaleDateString()}</td>
+                    <td className="px-4 py-3 text-slate-500 whitespace-nowrap">{signal.publication_date ? new Date(signal.publication_date).toLocaleDateString() : '—'}</td>
                     {isAuthenticated && (
                       <td className="px-4 py-3">
                         <Link to={`/signals/${signal.id}/edit`} className="text-xs text-indigo-600 hover:text-indigo-800 font-medium">Edit</Link>

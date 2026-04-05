@@ -37,6 +37,7 @@ export default function ExternalSearch() {
   const [lastRun, setLastRun] = useState<SearchRunResponse | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [bulkActing, setBulkActing] = useState(false);
+  const [dateSortOrder, setDateSortOrder] = useState<'none' | 'asc' | 'desc'>('none');
 
   async function loadWatchList() {
     try {
@@ -66,6 +67,15 @@ export default function ExternalSearch() {
   }, []);
 
   const activeWatch = useMemo(() => watchList.filter((w) => w.status === 'active'), [watchList]);
+
+  const sortedReviewRows = useMemo(() => {
+    if (dateSortOrder === 'none') return reviewRows;
+    return [...reviewRows].sort((a, b) => {
+      const da = a.publication_date ? new Date(a.publication_date).getTime() : 0;
+      const db = b.publication_date ? new Date(b.publication_date).getTime() : 0;
+      return dateSortOrder === 'asc' ? da - db : db - da;
+    });
+  }, [reviewRows, dateSortOrder]);
 
   async function runManualSearch() {
     if (!manualQuery.trim()) {
@@ -268,6 +278,11 @@ export default function ExternalSearch() {
               <option value="imported">Imported</option>
               <option value="dismissed">Dismissed</option>
             </select>
+            <select value={dateSortOrder} onChange={(e) => setDateSortOrder(e.target.value as 'none' | 'asc' | 'desc')} className="border border-slate-200 rounded-lg px-3 py-1.5 text-sm">
+              <option value="none">Sort: default</option>
+              <option value="desc">Date: newest first</option>
+              <option value="asc">Date: oldest first</option>
+            </select>
             <button onClick={() => loadReviewRows()} className="text-sm bg-slate-100 rounded-lg px-3 py-1.5">Refresh</button>
           </div>
         </div>
@@ -302,7 +317,7 @@ export default function ExternalSearch() {
                 <span className="text-xs text-slate-500">Select all new ({reviewRows.filter(r => r.review_status === 'new').length})</span>
               </div>
             )}
-            {reviewRows.map((row) => (
+            {sortedReviewRows.map((row) => (
               <div key={row.id} className={`border rounded-lg p-3 transition-colors ${selectedIds.has(row.id) ? 'border-indigo-300 bg-indigo-50' : 'border-slate-200'}`}>
                 <div className="flex items-start justify-between gap-4">
                   <div className="flex items-start gap-3">

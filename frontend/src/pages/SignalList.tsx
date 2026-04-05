@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import api from '../api';
 import { Signal, PaginatedSignals } from '../types/signal';
@@ -17,17 +17,71 @@ const STATUS_COLORS: Record<string, string> = {
   rejected: 'bg-red-100 text-red-700',
 };
 
-function SortHeader({ col, label, sort, order, onToggle }: {
-  col: string; label: string; sort: string; order: string; onToggle: (col: string) => void;
+const DEFAULT_COL_WIDTHS: Record<string, number> = {
+  title: 280, status: 130, type: 110, topic: 150, source: 100,
+  conf: 70, impact: 70, novelty: 70, published: 110, actions: 80,
+};
+
+function ResizableHeader({
+  label, width, onResize, onClick, sortIndicator, className = ''
+}: {
+  label: React.ReactNode; width: number;
+  onResize: (delta: number) => void;
+  onClick?: () => void;
+  sortIndicator?: React.ReactNode;
+  className?: string;
+}) {
+  const startX = useRef<number | null>(null);
+
+  function handleMouseDown(e: React.MouseEvent) {
+    e.stopPropagation();
+    e.preventDefault();
+    startX.current = e.clientX;
+    const onMove = (me: MouseEvent) => {
+      if (startX.current === null) return;
+      onResize(me.clientX - startX.current);
+      startX.current = me.clientX;
+    };
+    const onUp = () => {
+      startX.current = null;
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+    };
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+  }
+
+  return (
+    <th
+      onClick={onClick}
+      style={{ width, minWidth: 40 }}
+      className={`relative px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider select-none whitespace-nowrap overflow-hidden ${onClick ? 'cursor-pointer hover:bg-slate-100' : ''} ${className}`}
+    >
+      {label}{sortIndicator}
+      <span
+        onMouseDown={handleMouseDown}
+        onClick={e => e.stopPropagation()}
+        className="absolute right-0 top-0 h-full w-2 cursor-col-resize flex items-center justify-center group"
+      >
+        <span className="w-px h-4 bg-slate-300 group-hover:bg-indigo-400 transition-colors" />
+      </span>
+    </th>
+  );
+}
+
+function SortHeader({ col, label, sort, order, onToggle, width, onResize }: {
+  col: string; label: string; sort: string; order: string;
+  onToggle: (col: string) => void; width: number; onResize: (delta: number) => void;
 }) {
   const active = sort === col;
   return (
-    <th
+    <ResizableHeader
+      label={label}
+      width={width}
+      onResize={onResize}
       onClick={() => onToggle(col)}
-      className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider cursor-pointer select-none hover:bg-slate-100 whitespace-nowrap"
-    >
-      {label} {active ? (order === 'desc' ? '↓' : '↑') : <span className="opacity-30">↕</span>}
-    </th>
+      sortIndicator={active ? (order === 'desc' ? ' ↓' : ' ↑') : <span className="opacity-30"> ↕</span>}
+    />
   );
 }
 
@@ -39,7 +93,15 @@ export default function SignalList() {
   const [techAreas, setTechAreas] = useState<string[]>([]);
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [bulkDeleting, setBulkDeleting] = useState(false);
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [editDraft, setEditDraft] = useState<Partial<Signal>>({});
+  const [saving, setSaving] = useState(false);
+  const [colWidths, setColWidths] = useState<Record<string, number>>({ ...DEFAULT_COL_WIDTHS });
   const { isAuthenticated } = useAuth();
+
+  function resizeCol(col: string, delta: number) {
+    setColWidths(prev => ({ ...prev, [col]: Math.max(40, (prev[col] ?? DEFAULT_COL_WIDTHS[col] ?? 80) + delta) }));
+  }
 
   const status = searchParams.get('status') || '';
   const topic_area = searchParams.get('topic_area') || '';
@@ -151,6 +213,37 @@ export default function SignalList() {
     URL.revokeObjectURL(url);
   }
 
+  function startEdit(signal: Signal) {
+    setEditingId(signal.id);
+    setEditDraft({
+      status: signal.status,
+      signal_type: signal.signal_type,
+      topic_area: signal.topic_area,
+      source_type: signal.source_type,
+      confidence_level: signal.confidence_level,
+      potential_impact: signal.potential_impact,
+      novelty: signal.novelty,
+      publication_date: signal.publication_date,
+    });
+  }
+
+  function cancelEdit() {
+    setEditingId(null);
+    setEditDraft({});
+  }
+
+  async function saveEdit(signal: Signal) {
+    setSaving(true);
+    try {
+      await api.put(`/api/signals/${signal.id}`, { ...signal, ...editDraft });
+      setEditingId(null);
+      setEditDraft({});
+      fetchSignals();
+    } finally {
+      setSaving(false);
+    }
+  }
+
   function setPage(p: number) {
     const next = new URLSearchParams(searchParams);
     next.set('page', String(p));
@@ -237,7 +330,7 @@ export default function SignalList() {
           <div className="text-center py-12 text-slate-400">No signals found.</div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+            <table className="w-full text-sm table-fixed">
               <thead className="bg-slate-50 border-b border-slate-200">
                 <tr>
                   {isAuthenticated && (
@@ -246,21 +339,23 @@ export default function SignalList() {
                         className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-300" />
                     </th>
                   )}
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Title</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Status</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Type</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Topic</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Source</th>
-                  <SortHeader col="confidence_level" label="Conf." sort={sort} order={order} onToggle={toggleSort} />
-                  <SortHeader col="potential_impact" label="Impact" sort={sort} order={order} onToggle={toggleSort} />
-                  <SortHeader col="novelty" label="Novelty" sort={sort} order={order} onToggle={toggleSort} />
-                  <SortHeader col="publication_date" label="Published" sort={sort} order={order} onToggle={toggleSort} />
-                  {isAuthenticated && <th className="px-4 py-3 w-16" />}
+                  <ResizableHeader label="Title" width={colWidths.title} onResize={d => resizeCol('title', d)} />
+                  <ResizableHeader label="Status" width={colWidths.status} onResize={d => resizeCol('status', d)} />
+                  <ResizableHeader label="Type" width={colWidths.type} onResize={d => resizeCol('type', d)} />
+                  <ResizableHeader label="Topic" width={colWidths.topic} onResize={d => resizeCol('topic', d)} />
+                  <ResizableHeader label="Source" width={colWidths.source} onResize={d => resizeCol('source', d)} />
+                  <SortHeader col="confidence_level" label="Conf." sort={sort} order={order} onToggle={toggleSort} width={colWidths.conf} onResize={d => resizeCol('conf', d)} />
+                  <SortHeader col="potential_impact" label="Impact" sort={sort} order={order} onToggle={toggleSort} width={colWidths.impact} onResize={d => resizeCol('impact', d)} />
+                  <SortHeader col="novelty" label="Novelty" sort={sort} order={order} onToggle={toggleSort} width={colWidths.novelty} onResize={d => resizeCol('novelty', d)} />
+                  <SortHeader col="publication_date" label="Published" sort={sort} order={order} onToggle={toggleSort} width={colWidths.published} onResize={d => resizeCol('published', d)} />
+                  {isAuthenticated && <th className="px-4 py-3" style={{ width: colWidths.actions }} />}
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {result?.data.map((signal, i) => (
-                  <tr key={signal.id} className={`hover:bg-slate-50 transition-colors ${selectedIds.has(signal.id) ? 'bg-indigo-50' : ''}`}>
+                {result?.data.map((signal, i) => {
+                  const isEditing = isAuthenticated && editingId === signal.id;
+                  return (
+                  <tr key={signal.id} className={`hover:bg-slate-50 transition-colors ${selectedIds.has(signal.id) ? 'bg-indigo-50' : ''} ${isEditing ? 'bg-amber-50' : ''}`}>
                     {isAuthenticated && (
                       <td className="px-4 py-3">
                         <input type="checkbox" checked={selectedIds.has(signal.id)} onChange={() => toggleSelect(signal.id)}
@@ -276,25 +371,98 @@ export default function SignalList() {
                         {signal.title}
                       </Link>
                     </td>
+                    {/* Status */}
                     <td className="px-4 py-3">
-                      <span className={`text-xs font-semibold px-2 py-1 rounded-full ${STATUS_COLORS[signal.status] || 'bg-slate-100 text-slate-600'}`}>
-                        {signal.status.replace('_', ' ')}
-                      </span>
+                      {isEditing ? (
+                        <select value={editDraft.status} onChange={e => setEditDraft(d => ({ ...d, status: e.target.value as Signal['status'] }))}
+                          className="border border-slate-300 rounded px-2 py-1 text-xs w-full">
+                          {STATUSES.map(s => <option key={s} value={s}>{s.replace('_', ' ')}</option>)}
+                        </select>
+                      ) : (
+                        <span className={`text-xs font-semibold px-2 py-1 rounded-full ${STATUS_COLORS[signal.status] || 'bg-slate-100 text-slate-600'}`}>
+                          {signal.status.replace('_', ' ')}
+                        </span>
+                      )}
                     </td>
-                    <td className="px-4 py-3 text-slate-600">{signal.signal_type || '—'}</td>
-                    <td className="px-4 py-3 text-slate-600 max-w-[8rem] truncate">{signal.topic_area || '—'}</td>
-                    <td className="px-4 py-3 text-slate-600">{signal.source_type || '—'}</td>
-                    <td className="px-4 py-3 text-slate-700 text-center">{signal.confidence_level ?? '—'}</td>
-                    <td className="px-4 py-3 text-slate-700 text-center">{signal.potential_impact ?? '—'}</td>
-                    <td className="px-4 py-3 text-slate-700 text-center">{signal.novelty ?? '—'}</td>
-                    <td className="px-4 py-3 text-slate-500 whitespace-nowrap">{signal.publication_date ? new Date(signal.publication_date).toLocaleDateString() : '—'}</td>
+                    {/* Signal type */}
+                    <td className="px-4 py-3 text-slate-600">
+                      {isEditing ? (
+                        <select value={editDraft.signal_type ?? ''} onChange={e => setEditDraft(d => ({ ...d, signal_type: e.target.value as Signal['signal_type'] }))}
+                          className="border border-slate-300 rounded px-2 py-1 text-xs w-full">
+                          <option value="">—</option>
+                          {SIGNAL_TYPES.map(s => <option key={s} value={s}>{s}</option>)}
+                        </select>
+                      ) : signal.signal_type || '—'}
+                    </td>
+                    {/* Topic area */}
+                    <td className="px-4 py-3 text-slate-600 max-w-[8rem]">
+                      {isEditing ? (
+                        <input value={editDraft.topic_area ?? ''} onChange={e => setEditDraft(d => ({ ...d, topic_area: e.target.value }))}
+                          className="border border-slate-300 rounded px-2 py-1 text-xs w-full" />
+                      ) : <span className="truncate block">{signal.topic_area || '—'}</span>}
+                    </td>
+                    {/* Source type */}
+                    <td className="px-4 py-3 text-slate-600">
+                      {isEditing ? (
+                        <select value={editDraft.source_type ?? ''} onChange={e => setEditDraft(d => ({ ...d, source_type: e.target.value as Signal['source_type'] }))}
+                          className="border border-slate-300 rounded px-2 py-1 text-xs w-full">
+                          <option value="">—</option>
+                          {SOURCE_TYPES.map(s => <option key={s} value={s}>{s}</option>)}
+                        </select>
+                      ) : signal.source_type || '—'}
+                    </td>
+                    {/* Confidence */}
+                    <td className="px-4 py-3 text-slate-700 text-center">
+                      {isEditing ? (
+                        <input type="number" min={1} max={5} value={editDraft.confidence_level ?? ''} onChange={e => setEditDraft(d => ({ ...d, confidence_level: e.target.value ? Number(e.target.value) : undefined }))}
+                          className="border border-slate-300 rounded px-1 py-1 text-xs w-14 text-center" />
+                      ) : signal.confidence_level ?? '—'}
+                    </td>
+                    {/* Impact */}
+                    <td className="px-4 py-3 text-slate-700 text-center">
+                      {isEditing ? (
+                        <input type="number" min={1} max={5} value={editDraft.potential_impact ?? ''} onChange={e => setEditDraft(d => ({ ...d, potential_impact: e.target.value ? Number(e.target.value) : undefined }))}
+                          className="border border-slate-300 rounded px-1 py-1 text-xs w-14 text-center" />
+                      ) : signal.potential_impact ?? '—'}
+                    </td>
+                    {/* Novelty */}
+                    <td className="px-4 py-3 text-slate-700 text-center">
+                      {isEditing ? (
+                        <input type="number" min={1} max={5} value={editDraft.novelty ?? ''} onChange={e => setEditDraft(d => ({ ...d, novelty: e.target.value ? Number(e.target.value) : undefined }))}
+                          className="border border-slate-300 rounded px-1 py-1 text-xs w-14 text-center" />
+                      ) : signal.novelty ?? '—'}
+                    </td>
+                    {/* Published date */}
+                    <td className="px-4 py-3 text-slate-500 whitespace-nowrap">
+                      {isEditing ? (
+                        <input type="date" value={editDraft.publication_date ?? ''} onChange={e => setEditDraft(d => ({ ...d, publication_date: e.target.value }))}
+                          className="border border-slate-300 rounded px-2 py-1 text-xs" />
+                      ) : signal.publication_date ? new Date(signal.publication_date).toLocaleDateString() : '—'}
+                    </td>
                     {isAuthenticated && (
-                      <td className="px-4 py-3">
-                        <Link to={`/signals/${signal.id}/edit`} className="text-xs text-indigo-600 hover:text-indigo-800 font-medium">Edit</Link>
+                      <td className="px-4 py-3 whitespace-nowrap">
+                        {isEditing ? (
+                          <div className="flex gap-1">
+                            <button onClick={() => saveEdit(signal)} disabled={saving}
+                              className="text-xs px-2 py-1 bg-indigo-600 text-white rounded hover:bg-indigo-700 disabled:opacity-50">
+                              {saving ? '…' : 'Save'}
+                            </button>
+                            <button onClick={cancelEdit}
+                              className="text-xs px-2 py-1 border border-slate-300 rounded hover:bg-slate-100">
+                              Cancel
+                            </button>
+                          </div>
+                        ) : (
+                          <button onClick={() => startEdit(signal)}
+                            className="text-xs text-indigo-600 hover:text-indigo-800 font-medium">
+                            Edit
+                          </button>
+                        )}
                       </td>
                     )}
                   </tr>
-                ))}
+                  );
+                })}
               </tbody>
             </table>
           </div>
